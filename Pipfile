@@ -1,0 +1,45 @@
+[[source]]
+name = "pypi"
+url = "https://pypi.org/simple"
+verify_ssl = true
+
+[dev-packages]
+pylint = "*"
+autopep8 = "*"
+
+[packages]
+django = {extras = ["argon2"],version = "*"}
+psycopg2 = "*"
+djangorestframework = "*"
+django-extensions = "*"
+werkzeug = "*"
+django-tenant-schemas = "*"
+pillow = "*"
+django-cors-headers = "*"
+django-celery-email = "*"
+pyjwt = "*"
+redis = "*"
+pyopenssl = "*"
+django-multiselectfield = "*"
+mkdocs = "*"
+autoflake = "*"
+pylint-django = "*"
+pylint = "*"
+coreapi = "*"
+pyyaml = "*"
+drfdocs = "*"
+drf-yasg = "*"
+django-serializable-model = "*"
+requests = "*"
+celery = "*"
+oauth2client = "*"
+httplib2 = "*"
+oauthlib = "*"
+google-auth = "*"
+google-api-python-client = "*"
+daphne = "*"
+channels = "*"
+django-filter = "*"
+
+[requires]
+python_version = "3.8"

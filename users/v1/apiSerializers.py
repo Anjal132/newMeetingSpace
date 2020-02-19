@@ -1,0 +1,231 @@
+from datetime import datetime, timedelta
+
+from django.conf import settings
+from django.contrib.auth import password_validation
+from django.db import connection
+from rest_framework import serializers
+from rest_framework.validators import UniqueValidator
+
+from organization.apiSerializers import CompanyDetailSerializer
+from staffProfile.models import StaffProfile
+from userProfile.models import UserProfile
+from users.models import User
+from ccalendar.models import Google, Outlook
+
+class ActiveInactiveUserSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ('is_active',)
+
+
+class UserListSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ('id', 'email', 'is_active', 'is_verified')
+
+
+class UserDetailSerializer(serializers.ModelSerializer):
+    """Serializer for user"""
+    belongs_to = CompanyDetailSerializer(required=True, many=True)
+
+    class Meta:
+        model = User
+        fields = ('email', 'belongs_to')
+
+class UserProfileSerializer(serializers.ModelSerializer):
+    # building = serializers.SlugRelatedField(read_only=True, slug_field='building')
+    # department = serializers.SlugRelatedField(read_only=True, slug_field='department')
+    """Serializer for User's profile"""
+    class Meta:
+        model = UserProfile
+        fields = ('building', 'department', 'first_name', 'middle_name', 'last_name', 'profile_pics')
+        # fields = '__all__'
+
+        
+
+
+
+class UserSerializer(serializers.ModelSerializer):
+    """Serializer for User's profile"""
+
+    class Meta:
+        model = UserProfile
+        fields = ('first_name', 'last_name', 'middle_name', 'internationalization', 'profile_pics')
+
+class UserProfileDetailSerializer(serializers.ModelSerializer):
+    """Serializer for User's profile"""
+
+    # user = UserDetailSerializer(required=True)
+    building = serializers.SlugRelatedField(slug_field='name', read_only=True)
+    department = serializers.SlugRelatedField(slug_field='department_name', read_only=True)
+    google_sign_in = serializers.SerializerMethodField()
+    outlook_sign_in = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = UserProfile
+        fields = ('building', 'department', 'first_name', 'middle_name', 'last_name', 'internationalization', 'profile_pics', 'google_sign_in', 'outlook_sign_in')
+
+    def get_google_sign_in(self, obj):
+        # user = get_user(self.request)
+        user = User.objects.get(email=obj)
+        
+        if Google.objects.filter(user=user).exists():
+            goo = Google.objects.get(user=user)
+            return goo.email
+        return "False"
+
+    def get_outlook_sign_in(self, obj):
+        user = User.objects.get(email=obj)
+
+        if Outlook.objects.filter(user=user).exists():
+            return "True"
+        return "False"
+
+
+class StaffProfileDetailSerializer(serializers.ModelSerializer):
+    """Serializer for User's profile"""
+    user = UserDetailSerializer(required=True)
+
+    class Meta:
+        model = StaffProfile
+        fields = ('first_name', 'middle_name', 'last_name', 'internationalization', 'profile_pics', 'user')
+
+class StaffProfileSerializer(serializers.ModelSerializer):
+    """Serializer for Staff's profile"""
+    class Meta:
+        model = StaffProfile
+        fields = "__all__"
+
+class ResetPasswordSerializer(serializers.Serializer):
+    """ Serializer to reset the own's password """
+    email = serializers.EmailField(required=True)
+
+
+class ChangePasswordSerializer(serializers.Serializer):
+    """ Serializer to change the user password """
+
+    old_password = serializers.CharField(required=True, write_only=True)
+    new_password = serializers.CharField(required=True, write_only=True)
+
+    def validate_old_password(self, value):
+        user = User.objects.get(uid=self.context['uid'])
+        if not user.check_password(value):
+            raise serializers.ValidationError(
+                'Current password does not match')
+        return value
+
+    def validate_new_password(self, value):
+        password_validation.validate_password(value)
+        return value
+
+
+class UserProfileBuildingSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = UserProfile
+        fields = ['building', 'department']
+
+class CreateEmployeeSerializer(serializers.ModelSerializer):
+    """Serializer to invite the employee by Company Admin."""
+
+    msg = 'The user with this email is already invited'
+    usr = User.objects.all()
+    email = serializers.EmailField(required=True, validators=[
+        UniqueValidator(usr, msg)])
+    building = UserProfileBuildingSerializer()
+
+    class Meta:
+        """ This is the Meta Class for Model Serializer"""
+
+        model = User
+        fields = ['email', 'building']
+
+    def create(self, validated_data):
+        building = validated_data.pop('building')
+
+        validated_data['organization'] = self.context['organization']
+        user = User.objects.create_user(**validated_data)
+
+        connection.set_schema(schema_name=user.temp_name)
+        UserProfile.objects.filter(user=user).update(building=building['building'], department=building['department'])
+        
+        return user
+
+
+class PasswordResetConfirmSerializer(serializers.Serializer):
+    '''This is the serializer to reset the user's password.'''
+
+    password = serializers.CharField(required=True, write_only=True)
+    uidb64 = serializers.CharField(required=True, write_only=True)
+    token = serializers.CharField(required=True, write_only=True)
+
+    def validate_password(self, value):
+        password_validation.validate_password(value)
+        return value
+
+
+class LoginSerializer(serializers.Serializer):
+    '''This is the serializer class for getting user credentials to authenticate the user'''
+
+    email = serializers.CharField(required=True)
+    password = serializers.CharField(required=True)
+
+
+class LoginResponseSerializer(serializers.Serializer):
+    '''This is the serializer class to serialize the tokens to send to the user'''
+
+    access_token = serializers.SerializerMethodField()
+    refresh_token = serializers.SerializerMethodField()
+    expiry_time = serializers.SerializerMethodField()
+    schema_name = serializers.SerializerMethodField()
+    user_type = serializers.SerializerMethodField()
+    last_login = serializers.SerializerMethodField()
+
+    def get_schema_name(self, obj):
+        return obj.temp_name
+
+    def get_access_token(self, obj):
+        '''Get's the access token for current user'''
+        return obj.access_token
+
+    def get_refresh_token(self, obj):
+        '''Get's the refresh token for current user'''
+        return obj.refresh_token
+
+    def get_expiry_time(self, obj):
+        '''Get's the expiry time of current access token for current user's request'''
+        dt = datetime.now() + timedelta(minutes=(settings.ACCESS_TOKEN_EXPIRY_TIME-2))
+        return int(dt.strftime('%s'))
+
+    def get_user_type(self, obj):
+        group = 'Not Found'
+        user_groups = obj.groups.values_list('name', flat=True)
+        user_groups_as_list = list(user_groups)
+        if('Staff_User' in user_groups_as_list):
+            group = 'Superuser'
+        elif('Admin_User' in user_groups_as_list):
+            group = 'CompanyAdmin'
+        elif('Employee_User' in user_groups_as_list):
+            group = 'Employee'
+        return group
+
+    def get_last_login(self, obj):
+        if obj.temp_name != 'public':
+            connection.set_schema(schema_name=obj.temp_name)
+            user_profile = UserProfile.objects.get(user=obj)
+            
+            if user_profile.building is not None:
+                return obj.last_login
+
+            return None
+        return obj.last_login
+
+class RefreshTokenSerializer(serializers.Serializer):
+    '''
+        This is the serializer to get the new access and refresh token using old refresh token.
+    '''
+    current_refresh_token = serializers.CharField(
+        required=True, write_only=True)
+
+
+class EmptySerializer(serializers.Serializer):
+    pass

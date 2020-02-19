@@ -1,0 +1,22 @@
+{% autoescape off %}
+
+Dear {{ email }},
+
+You have been invited to {{ meeting_title }} at {{ meeting_time }} by {{ meeting_host }} of {{ company_name }}.
+
+We look forward to seeing you there.
+
+Title: {{ meeting_title }}
+Time: {{ meeting_time }}
+Room: {{ meeting_room }}
+Organization: {{ company_name }}
+Venue: {{ property_location }}
+
+<!-- Add button for add to calendars -->
+
+Regards,
+{{ meeting_host }}
+{{ company_name }}
+
+
+{% endautoescape %}

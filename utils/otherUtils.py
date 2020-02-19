@@ -1,0 +1,78 @@
+from django.conf import settings
+from django.contrib.auth.tokens import default_token_generator
+from django.core.mail import send_mail, send_mass_mail
+from django.db import connection
+from django.template.loader import render_to_string
+from django.utils.encoding import force_bytes
+from django.utils.http import urlsafe_base64_encode
+
+from organization.models import Organization
+from userProfile.models import UserProfile
+
+# from users.models import User
+
+def send_meeting_mail(participant_list, meeting):
+    full_name = UserProfile.objects.get(user=meeting.host).get_full_name
+    schema_name = Organization.objects.get(schema_name=connection.get_schema())
+
+
+    mail_subject = 'Invitation to ' + meeting.title
+
+    message = render_to_string('send_meeting_email.html', {
+        'meeting_title': meeting.title,
+        'meeting_time': '10PM',
+        'meeting_room': '101A',
+        'meeting_host': meeting.host,
+        'company_name': schema_name,
+        'property': 'New Property'
+    })
+
+    send_mail(mail_subject, message, 'admin@meetingspace.com', participant_list, fail_silently=False)
+
+
+def send_mail_admin(admin_list, company_name):
+    
+    for admin in admin_list:
+
+        uid = urlsafe_base64_encode(force_bytes(admin.uid))
+        token = default_token_generator.make_token(admin)
+
+        mail_subject = 'Attention!, Email Verification (Meeting Space)'
+
+        message = render_to_string('confirm_email_admin.html', {
+            'company': company_name,
+            'domain': settings.FRONTEND_URL + '/verify/' + uid + '/' + token,
+        })
+
+        send_mail(mail_subject, message, 'admin@meetingspace.com',
+                    [admin.email], fail_silently=False)
+
+def send_password_reset_email(user):
+
+    uid = urlsafe_base64_encode(force_bytes(user.uid))
+    token = default_token_generator.make_token(user)
+
+    mail_subject = 'Attention!, Email Verification (Meeting Space)'
+
+    message = render_to_string('reset_email.html', {
+        'domain': settings.FRONTEND_URL + '/reset_password/' + uid + '/' + token,
+    })
+
+    send_mail(mail_subject, message, 'admin@meetingspace.com',
+                [user.email], fail_silently=False)
+
+def send_mail_employee(user, organization):
+
+    
+    uid = urlsafe_base64_encode(force_bytes(user.uid))
+    token = default_token_generator.make_token(user)
+
+    mail_subject = 'Attention!, Email Verification (Meeting Space)'
+
+    message = render_to_string('confirm_email.html', {
+        'company': organization.name,
+        'domain': settings.FRONTEND_URL + '/verify/' + uid + '/' + token,
+    })
+
+    send_mail(mail_subject, message, 'admin@meetingspace.com',
+                [user.email], fail_silently=False)

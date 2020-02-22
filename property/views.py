@@ -13,7 +13,7 @@ from utils.utils import get_user
 
 from .models import Department, Property, Room
 from .serializers import (DepartmentSerializer, PropertySerializer,
-                          RoomSerializer)
+                          RoomSerializer, BookedRoomSerializer)
 
 
 '''
@@ -87,8 +87,8 @@ class AvailableRoomsAPIView(generics.ListAPIView):
 
 
 class AllRoomsAPIView(generics.ListAPIView):
-    permission_classes = [IsAuthenticated, IsEmployee]
-    serializer_class = RoomSerializer
+    permission_classes = [IsAuthenticated, IsCompanyAdmin]
+    serializer_class = BookedRoomSerializer
 
     def get_queryset(self):
         property_id = self.request.query_params.get('property', None)

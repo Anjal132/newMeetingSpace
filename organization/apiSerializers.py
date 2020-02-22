@@ -30,7 +30,8 @@ class CreateCompanySerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Organization
-        fields = ('name', 'short_name', 'company_admin', 'on_trial', 'subscription_expiry', 'is_active')
+        fields = ('name', 'short_name', 'company_admin',
+                  'on_trial', 'subscription_expiry', 'is_active')
 
     def create(self, validated_data):
         admin_list = validated_data.pop('company_admin')
@@ -38,9 +39,11 @@ class CreateCompanySerializer(serializers.ModelSerializer):
 
         for admin in admin_list:
             email_admin = admin['email']
-            admin = User.objects.create_company_admin(email=email_admin, organization=organization)
+            admin = User.objects.create_company_admin(
+                email=email_admin, organization=organization)
             organization.company_admin.add(admin)
         return organization
+
 
 class CompanyDetailSerializer(serializers.ModelSerializer):
     class Meta:
@@ -48,10 +51,15 @@ class CompanyDetailSerializer(serializers.ModelSerializer):
         fields = ('name', 'short_name')
 
 
-
 class CompanyStatusSerializer(serializers.ModelSerializer):
     class Meta:
         model = Organization
         fields = ('is_active', 'on_trial', 'subscription_expiry')
 
-    
+
+class CompanyProfileSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Organization
+        fields = ['name', 'on_trial', 'subscription_expiry', 'logo',
+                  'street', 'zip_code', 'city', 'country', 'color', 'website']
+        read_only_fields = ['on_trial', 'subscription_expiry']

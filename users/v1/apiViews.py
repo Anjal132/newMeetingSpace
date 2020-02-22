@@ -141,7 +141,6 @@ class AuthViewSet(MultipleSerializerMixin, viewsets.GenericViewSet):
             serializer = StaffProfileDetailSerializer(self.get_queryset().first())    
         else:
             serializer = UserProfileDetailSerializer(self.get_queryset().first())
-            print(serializer.data)
         return Response(serializer.data)
 
     @action(methods=['GET', ], detail=False, permission_classes=[IsAuthenticated, ])

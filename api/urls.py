@@ -10,4 +10,5 @@ urlpatterns = [
     path('calendar/', include('ccalendar.urls')),
     path('property/', include('property.urls')),
     path('notification/', include('notifications.urls')),
+    path('organization/', include('organization.urls')),
 ]

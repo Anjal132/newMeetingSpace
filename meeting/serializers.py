@@ -1,3 +1,4 @@
+from django.core.exceptions import ObjectDoesNotExist
 from rest_framework import serializers
 
 from notifications.models import Notification
@@ -47,18 +48,19 @@ class DetailsSerializer(serializers.ModelSerializer):
                                         notification_type='meeting', message=message, meeting=details)
             notification.save()
 
-        send_meeting_mail(participant_email, meeting)
+        send_meeting_mail(participant_email, meeting, details)
 
         return details
 
 
 class MeetingHostSerializer(serializers.ModelSerializer):
     meeting_to_participant = serializers.JSONField()
-
+    
     class Meta:
         model = Host
         fields = ('uid', 'title', 'agenda', 'duration', 'start_date',
                   'end_date', 'type', 'meeting_to_participant', 'timezone')
+        read_only_fields = ('uid', )
 
     def create(self, validated_data):
         participant_data = validated_data.pop('meeting_to_participant')
@@ -71,14 +73,47 @@ class MeetingHostSerializer(serializers.ModelSerializer):
             participant = participants['participant']
             try:
                 participant = int(participant)
-                uid = User.objects.get(id=participant)
-                Status.objects.create(meeting_host=host, participant=uid)
-            except:
+                userid = User.objects.get(id=participant)
+                Status.objects.create(meeting_host=host, participant=userid)
+            except ValueError:
                 send_email_to_other_participants.append(participant)
+            except ObjectDoesNotExist:
+                print('Invalid Participant ID')
 
         host.participant_email = send_email_to_other_participants
         host.save()
 
-        # send_meeting_mail(send_email_to_other_participants, host)
         return host
 
+    def update(self, instance, validated_data):
+        participant_data = validated_data.pop('meeting_to_participant')
+        validated_data['host'] = self.context['host']
+
+        send_email_to_other_participants = []
+
+        instance.title = validated_data['title']
+        instance.agenda = validated_data['agenda']
+        instance.duration = validated_data['duration']
+        instance.start_date = validated_data['start_date']
+        instance.end_date = validated_data['end_date']
+        instance.type = validated_data['type']
+        instance.timezone = validated_data['timezone']
+
+        Status.objects.filter(meeting_host=instance).delete()
+
+        for participants in participant_data:
+            participant = participants['participant']
+
+            try:
+                participant = int(participant)
+                userid = User.objects.get(id=participant)
+                Status.objects.create(meeting_host=instance, participant=userid)
+            except ValueError:
+                send_email_to_other_participants.append(participant)
+            except ObjectDoesNotExist:
+                print('Invalid Participant ID')
+
+        instance.participant_email = send_email_to_other_participants
+        instance.save()
+
+        return instance

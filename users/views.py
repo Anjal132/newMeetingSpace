@@ -1,6 +1,7 @@
 from datetime import datetime
 
 from django.conf import settings
+from django.core.exceptions import ObjectDoesNotExist
 from rest_framework import filters, status
 from rest_framework.generics import ListAPIView, RetrieveUpdateAPIView
 from rest_framework.permissions import IsAuthenticated
@@ -16,13 +17,12 @@ from users.tasks import add_batch_users
 from users.v1.apiSerializers import (ActiveInactiveUserSerializer,
                                      UserListSerializer)
 from utils.utils import get_user
-from django.core.exceptions import ObjectDoesNotExist
 
 
 class AddBatchEmployeeAPIView(APIView):
     authentication_classes = ()
     permission_classes = ()
-    
+
     '''
     from django.db import connection
     import requests
@@ -44,7 +44,8 @@ class AddBatchEmployeeAPIView(APIView):
             print(serializer.validated_data)
             file = serializer.validated_data['file']
 
-            filename = settings.BASE_DIR + '/csv/' + str(datetime.timestamp(datetime.now())) + file.name
+            filename = settings.BASE_DIR + '/csv/' + \
+                str(datetime.timestamp(datetime.now())) + file.name
             with open(filename, 'wb+') as destination:
                 for chunk in file.chunks():
                     destination.write(chunk)
@@ -62,6 +63,7 @@ class UserDetailAPIView(RetrieveUpdateAPIView):
         schema_name = self.request.headers['X_DTS_SCHEMA']
         return User.objects.filter(temp_name=schema_name)
 
+
 class GetSuggestionsAPIView(ListAPIView):
     '''
     Function for search as you type. May replace with Web Sockets
@@ -75,18 +77,20 @@ class GetSuggestionsAPIView(ListAPIView):
 
     def get_queryset(self):
         search = self.request.query_params.get('search', None)
-        
+
         if search is None:
             return UserProfile.objects.none()
 
         user = get_user(self.request)
         current_user_profile = UserProfile.objects.get(user=user)
 
-        users_in_same_property = list(UserProfile.objects.filter(building=current_user_profile.building).values_list('user_id', flat=True))
+        users_in_same_property = list(UserProfile.objects.filter(
+            building=current_user_profile.building).values_list('user_id', flat=True))
         users_in_same_property.remove(user.id)
 
         try:
-            active_users = list(User.objects.filter(id__in=users_in_same_property, is_active=True, is_verified=True).values_list('id', flat=True))
+            active_users = list(User.objects.filter(
+                id__in=users_in_same_property, is_active=True, is_verified=True).values_list('id', flat=True))
             return UserProfile.objects.filter(user_id__in=active_users)
         except:
             return UserProfile.objects.none()
@@ -94,10 +98,11 @@ class GetSuggestionsAPIView(ListAPIView):
 
 class GetProfileAPIView(APIView):
     permission_classes = (IsAuthenticated, IsEmployee)
-    
+
     '''
     Method to update profile for users
     '''
+
     def put(self, request):
         user = get_user(request)
 
@@ -107,14 +112,20 @@ class GetProfileAPIView(APIView):
             instance = UserProfile.objects.get(user=user)
         except ObjectDoesNotExist:
             return Response({'Message': 'Profile not found'}, status=status.HTTP_400_BAD_REQUEST)
-        
 
         serializer = ProfileSerializer(instance=instance, data=request.data)
 
         if serializer.is_valid():
             serializer.save()
             serializer_dict = serializer.data
+
+            serializer_dict['last_login'] = user.last_login
+
+            if instance.building is None:
+                serializer_dict['last_login'] = None
+
             serializer_dict['message'] = 'Profile successfully updated'
+            print(serializer_dict)
             return Response(serializer_dict, status=status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -133,4 +144,4 @@ class CheckJSONAPIView(APIView):
     permission_classes = (IsAuthenticated, IsEmployee)
 
     def get(self, request):
-        return Response({"Message":"Success"})
+        return Response({"Message": "Success"})

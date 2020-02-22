@@ -1,4 +1,5 @@
 from django.db import models
+import datetime
 from property.models import Department, Property, Room
 
 # Create your models here.
@@ -21,6 +22,8 @@ class UserProfile(models.Model):
     last_name = models.CharField(max_length=100, blank=True)
     internationalization = models.CharField(max_length=2, default='EN')
     profile_pics = models.ImageField(verbose_name='userPics', blank=True)
+    office_start_time = models.TimeField(default=datetime.time(10, 0))
+    office_end_time = models.TimeField(default=datetime.time(17, 0))
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

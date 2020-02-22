@@ -61,18 +61,19 @@ def create_dict_of_events(events, events_dict):
 def get_events_from_google_calendar(meeting_uid):
     url = 'https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMax={0}&timeMin={1}&orderBy=startTime&singleEvents=True'
     host = Host.objects.get(uid=meeting_uid)
+    user_profile = UserProfile.objects.get(user=host.host)
 
     participants = Status.objects.filter(meeting_host=host)
-    start_time = 10
-    end_time = 17
+    start_time = user_profile.office_start_time
+    end_time = user_profile.office_end_time
 
     office_start_datetime = datetime.datetime.combine(
-        host.start_date, datetime.time(start_time))
+        host.start_date, start_time)
     office_start_time = encode_timezone_aware_datetime(
         office_start_datetime, host.timezone)
 
     office_end_datetime = datetime.datetime.combine(
-        host.end_date, datetime.time(end_time))
+        host.end_date, end_time)
     office_end_time = encode_timezone_aware_datetime(
         office_end_datetime, host.timezone)
 
@@ -224,16 +225,16 @@ def get_empty_room(date, start_time, end_time, meeting):
     members = len(meeting.participant_email)
     members += Status.objects.filter(meeting_host=meeting).count()
 
-    # if meeting_type != 'CF':
-    #     remaining_rooms = Room.objects.filter(property=user_profile.building, room_type__in=[
-    #                                           'MR', 'PO', 'DH'], room_capacity__gte=members).exclude(id__in=booked_room_list)
-    # else:
-    #     remaining_rooms = Room.objects.filter(
-    #         property=user_profile.building, room_type='CR', room_capacity__gte=members).exclude(id__in=booked_room_list)
+    if meeting_type != 'CF':
+        remaining_rooms = Room.objects.filter(property=user_profile.building, room_type__in=[
+                                              'MR', 'PO', 'DH'], room_capacity__gte=members, is_active=True).exclude(id__in=booked_room_list)
+    else:
+        remaining_rooms = Room.objects.filter(
+            property=user_profile.building, room_type='CR', room_capacity__gte=members, is_active=True).exclude(id__in=booked_room_list)
 
-    # if not remaining_rooms.exists():
-    remaining_rooms = Room.objects.filter(
-        property=user_profile.building, room_capacity__gte=members).exclude(id__in=booked_room_list)
+    if not remaining_rooms.exists():
+        remaining_rooms = Room.objects.filter(
+            property=user_profile.building, room_capacity__gte=members, is_active=True).exclude(id__in=booked_room_list)
 
     if remaining_rooms.exists():
         return random.choice(remaining_rooms)
@@ -402,3 +403,16 @@ def meetings_details(meetings, filter_meeting, user, upcoming):
         return participated_list
 
     return meeting_list
+
+
+def root_suggestion(meeting_id, room_id):
+    google_events = get_events_from_google_calendar(meeting_id)
+
+    app_events = get_app_events(meeting_id)
+    events = get_single_events_dict(google_events, app_events)
+
+    suggestions = generate_suggestions(events, meeting_id, room_id)
+
+
+
+    return suggestions

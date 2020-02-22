@@ -1,18 +1,20 @@
 {% autoescape off %}
 
-Dear {{ email }},
+Greetings,
 
-You have been invited to {{ meeting_title }} at {{ meeting_time }} by {{ meeting_host }} of {{ company_name }}.
+You have been invited to {{ meeting_title }} at {{ meeting_start_time }} by {{ meeting_host }} of {{ company_name }}.
 
 We look forward to seeing you there.
 
-Title: {{ meeting_title }}
-Time: {{ meeting_time }}
-Room: {{ meeting_room }}
-Organization: {{ company_name }}
-Venue: {{ property_location }}
 
-<!-- Add button for add to calendars -->
+Title: {{ meeting_title }}
+Date: {{ meeting_date }}
+Time: {{ meeting_start_time }} - {{ meeting_end_time }}
+Room: {{ meeting_room }}/Floor: {{ floor }}
+Building: {{ property_location }}
+Organization: {{ company_name }}
+Location: {{ street }}, {{ city }}, {{ country }}
+
 
 Regards,
 {{ meeting_host }}

@@ -21,7 +21,7 @@ class ProfileSerializer(serializers.ModelSerializer):
 class ProfileSearchSerializer(serializers.ModelSerializer):
 
     name = serializers.SerializerMethodField()
-    # profile_picture = serializers.SerializerMethodField()
+    
 
 
     class Meta:
@@ -30,8 +30,4 @@ class ProfileSearchSerializer(serializers.ModelSerializer):
 
     def get_name(self, obj):
         return obj.get_full_name
-
-    # def get_profile_picture(self, obj):
-    #     print(obj.profile_pics)
-    #     return obj.profile_pics
-        
+     

@@ -68,7 +68,7 @@ class AvailableRoomsAPIView(generics.ListAPIView):
                 exclude_rooms.append(user_room.room.id)
 
         all_rooms = Room.objects.filter(
-            property=user_profile.building, is_active=True).exclude(id__in=exclude_rooms)
+            property=user_profile.building).exclude(id__in=exclude_rooms)
 
         booked_rooms = []
         for room in all_rooms:
@@ -82,8 +82,8 @@ class AvailableRoomsAPIView(generics.ListAPIView):
                     exclude_rooms.append(meeting.room.id)
 
         if booked == 'booked':
-            return Room.objects.filter(property=user_profile.building, room_type__in=room_type, floor__in=floor, id__in=booked_rooms)
-        return Room.objects.filter(property=user_profile.building, room_type__in=room_type, floor__in=floor).exclude(id__in=exclude_rooms)
+            return Room.objects.filter(property=user_profile.building, room_type__in=room_type, floor__in=floor, id__in=booked_rooms, is_active=True)
+        return Room.objects.filter(property=user_profile.building, room_type__in=room_type, floor__in=floor, is_active=True).exclude(id__in=exclude_rooms)
 
 
 class AllRoomsAPIView(generics.ListAPIView):

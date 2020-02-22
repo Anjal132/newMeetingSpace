@@ -35,4 +35,3 @@ class IsEmployee(permissions.BasePermission):
                 return True
 
         return False
-        

@@ -49,15 +49,10 @@ class CompanyDetailAPIView(generics.RetrieveUpdateAPIView):
 class CompanyProfileAPIView(generics.RetrieveUpdateAPIView):
     permission_classes = (IsAuthenticated, IsCompanyAdmin)
     serializer_class = CompanyProfileSerializer
-    lookup_field = 'short_name'
 
     def get_object(self):
         user = get_user(self.request)
-        short_name = self.kwargs.pop('short_name', None)
-
-        if user.temp_name != short_name + 'schema' or short_name is None:
-            return Organization.objects.none()
         
-        if short_name == 'public':
+        if user.temp_name == 'public':
             return Organization.objects.none()
-        return Organization.objects.get(short_name=short_name)
+        return Organization.objects.get(schema_name=user.temp_name)

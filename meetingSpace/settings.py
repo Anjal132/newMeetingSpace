@@ -110,7 +110,7 @@ WSGI_APPLICATION = 'meetingSpace.wsgi.application'
 DATABASES = {
     'default': {                # New
         'ENGINE': 'tenant_schemas.postgresql_backend',
-        'NAME': 'meeting',
+        'NAME': 'demo_meeting',
         'USER': 'meeting',
         'PASSWORD': 'meeting@t4tech',
         'HOST': 'localhost',
@@ -274,11 +274,24 @@ INTERNAL_IPS = [
     '127.0.0.1',
 ]
 
+#Change the check company subscription to run every midnight
 CELERY_BEAT_SCHEDULE = {
     'refresh_token_google': {
         'task': 'meeting.tasks.refresh_token_google',
         'schedule': crontab(minute="*/20"),
-    }
+    },
+    'check_company_subscription': {
+        'task': 'meeting.tasks.check_company_subscription',
+        'schedule': crontab(minute=0, hour=0),
+    },
+    'check_meeting_status': {
+        'task': 'meeting.tasks.check_meeting_status',
+        'schedule': crontab(minute="*/1"),
+    },
+    'reminders_of_meeting': {
+        'task': 'meeting.tasks.reminders_of_meeting',
+        'schedule': crontab(minute="*/1"),
+    },
 }
 
 MEDIA_URL = '/media/'

@@ -9,14 +9,16 @@ from utils.otherUtils import send_meeting_mail
 from .models import Details, Host, Status
 
 
-'''
-frontend will send Name/email. Upto backend to search for
-the id. Also design for firstname + lastname
-'''
-class StatusSerializer(serializers.ModelSerializer):
+class HostSerializer(serializers.ModelSerializer):
+    duration = serializers.SerializerMethodField()
     class Meta:
-        model = Status
-        fields = ('participant',)
+        model = Host
+        fields = ['uid', 'title', 'agenda', 'duration', 'start_date', 'end_date', 'type', 'participant_email', 'participant']
+    
+    def get_duration(self, obj):
+        return int(obj.duration.seconds / 60)
+
+
 
 class DetailsSerializer(serializers.ModelSerializer):
     start_time = serializers.TimeField(format='%H:%M:%S', input_formats=['%I:%M%p', '%I:%M %p', '%H:%M:%S'])
@@ -74,8 +76,14 @@ class MeetingHostSerializer(serializers.ModelSerializer):
             try:
                 participant = int(participant)
                 userid = User.objects.get(id=participant)
-                Status.objects.create(meeting_host=host, participant=userid)
+                participant_meeting = Status.objects.filter(meeting_host=host, participant=userid)
+
+                if not participant_meeting.exists():
+                    Status.objects.create(meeting_host=host, participant=userid)
             except ValueError:
+                if participant in send_email_to_other_participants:
+                    continue
+
                 send_email_to_other_participants.append(participant)
             except ObjectDoesNotExist:
                 print('Invalid Participant ID')
@@ -107,8 +115,14 @@ class MeetingHostSerializer(serializers.ModelSerializer):
             try:
                 participant = int(participant)
                 userid = User.objects.get(id=participant)
-                Status.objects.create(meeting_host=instance, participant=userid)
+                participant_meeting = Status.objects.filter(meeting_host=instance, participant=userid)
+
+                if not participant_meeting.exists():
+                    Status.objects.create(meeting_host=instance, participant=userid)
             except ValueError:
+                if participant in send_email_to_other_participants:
+                    continue
+                
                 send_email_to_other_participants.append(participant)
             except ObjectDoesNotExist:
                 print('Invalid Participant ID')

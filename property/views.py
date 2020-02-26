@@ -1,6 +1,6 @@
 import datetime
 
-from django.core.exceptions import ObjectDoesNotExist
+from django.core.exceptions import ObjectDoesNotExist, ValidationError
 from rest_framework import generics, status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -13,7 +13,7 @@ from utils.utils import get_user
 
 from .models import Department, Property, Room
 from .serializers import (DepartmentSerializer, PropertySerializer,
-                          RoomSerializer, BookedRoomSerializer)
+                          RoomSerializer, BookedRoomSerializer, DepartmentDetailSerializer)
 
 
 '''
@@ -87,7 +87,7 @@ class AvailableRoomsAPIView(generics.ListAPIView):
 
 
 class AllRoomsAPIView(generics.ListAPIView):
-    permission_classes = [IsAuthenticated, IsCompanyAdmin]
+    permission_classes = [IsAuthenticated, IsEmployee]
     serializer_class = BookedRoomSerializer
 
     def get_queryset(self):
@@ -157,7 +157,7 @@ class PropertyAddView(generics.ListCreateAPIView):
                 return Property.objects.exclude(is_available='SD')
 
             if building_status is not None:
-                if building_status != 'unavailable':
+                if building_status == 'unavailable':
                     return Property.objects.filter(is_available='SD')
                 return Property.objects.none()
 
@@ -186,6 +186,42 @@ class DepartmentView(generics.ListCreateAPIView):
     queryset = Department.objects.all()
     serializer_class = DepartmentSerializer
 
+class DepartmentDetailView(generics.ListAPIView):
+    permission_classes = [IsAuthenticated, IsEmployee]
+    serializer_class = DepartmentDetailSerializer
+
+
+    def list(self, request):
+        try:
+            user = get_user(request)
+            profile = UserProfile.objects.get(user=user)
+
+            building = -1
+            if profile.building is not None:
+                building = profile.building
+            
+            context = {'building': building, 'user': user}
+
+            queryset = self.get_queryset()
+            serializer = DepartmentDetailSerializer(queryset, many=True, context=context)
+            return Response(serializer.data)
+        except ValidationError:
+            return Response({'Message': 'Validation Error. Please retry later'}, status=status.HTTP_400_BAD_REQUEST)
+        except ObjectDoesNotExist:
+            return Response({'Message': 'User Does not exist'}, status=status.HTTP_400_BAD_REQUEST)
+
+    def get_queryset(self):
+        try:
+            user = get_user(self.request)
+            user_profile = UserProfile.objects.get(user=user)
+
+            if user_profile.department is None:
+                return Department.objects.none()
+            return Department.objects.filter(id=user_profile.department.id)
+        except ObjectDoesNotExist:
+            return Department.objects.none()
+
+
 
 '''
 Add rooms to a property and get all the rooms in an organization.
@@ -199,15 +235,13 @@ class RoomAddView(generics.CreateAPIView):
 
 
 '''
-Get all properties and the respective departments in the property.
+Get all active properties and the respective departments in the property.
 Returns department as nested JSON.
 '''
 
 
 class AllBuildingAllDepartmentView(APIView):
-    # permission_classes = (IsAuthenticated, IsEmployee)
-    authentication_classes = ()
-    permission_classes = ()
+    permission_classes = (IsAuthenticated, IsEmployee)
 
     def get(self, request):
         buildings = Property.objects.all()
@@ -218,6 +252,9 @@ class AllBuildingAllDepartmentView(APIView):
 
         buildings = []
         for data in property_serializer.data:
+            if data['is_available'] == 'SD':
+                continue
+
             building = {
                 'id': data['id'],
                 'name': data['name'],

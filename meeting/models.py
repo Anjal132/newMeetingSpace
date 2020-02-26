@@ -19,6 +19,7 @@ class Host(models.Model):
         ('CO', 'Completed'),
         ('FI', 'Finalized'),
         ('PO', 'Postponed'),
+        ('ON', 'Ongoing'),
         ('CA', 'Canceled')
     )
 
@@ -44,6 +45,7 @@ class Host(models.Model):
         User, related_name='participant', through='Status')
     participant_email = ArrayField(models.EmailField(), blank=True, null=True)
     timezone = models.CharField(max_length=50, blank=True, null=True)
+    # updated_at = models.DateTimeField(auto_now=True)
 
     def get_title(self):
         return self.title

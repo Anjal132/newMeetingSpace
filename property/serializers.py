@@ -5,6 +5,7 @@ from rest_framework import serializers
 from meeting.models import Details
 
 from .models import Department, Property, Room
+from userProfile.models import UserProfile
 
 
 class PropertySerializer(serializers.ModelSerializer):
@@ -20,6 +21,32 @@ class DepartmentSerializer(serializers.ModelSerializer):
         model = Department
         fields = '__all__'
 
+class DepartmentDetailSerializer(serializers.ModelSerializer):
+    members = serializers.SerializerMethodField()
+    class Meta:
+        model = Department
+        fields = ['id', 'department_name', 'members']
+    
+    def get_members(self, obj):
+        building = self.context['building']
+        user = self.context['user']
+        members = []
+
+        if building == -1 or building is None:
+            return members
+
+        user_profiles = UserProfile.objects.filter(department=obj, building=building)
+        for profile in user_profiles:
+            if profile.user == user:
+                continue
+
+            member = {
+                'user_id': profile.user.id,
+                'user_name': profile.get_full_name
+            }
+            members.append(member)
+
+        return members
 
 class RoomSerializer(serializers.ModelSerializer):
     

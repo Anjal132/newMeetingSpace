@@ -3,5 +3,5 @@ from organization.apiViews import CompanyProfileAPIView
 
 
 urlpatterns = [
-    path('profile/<slug:short_name>/', CompanyProfileAPIView.as_view()),
+    path('profile/', CompanyProfileAPIView.as_view()),
 ]

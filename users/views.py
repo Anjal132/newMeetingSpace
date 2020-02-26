@@ -60,8 +60,9 @@ class UserDetailAPIView(RetrieveUpdateAPIView):
     serializer_class = ActiveInactiveUserSerializer
 
     def get_queryset(self):
+        user = get_user(self.request)
         schema_name = self.request.headers['X_DTS_SCHEMA']
-        return User.objects.filter(temp_name=schema_name)
+        return User.objects.filter(temp_name=schema_name).exclude(id=user.id)
 
 
 class GetSuggestionsAPIView(ListAPIView):
@@ -125,7 +126,6 @@ class GetProfileAPIView(APIView):
                 serializer_dict['last_login'] = None
 
             serializer_dict['message'] = 'Profile successfully updated'
-            print(serializer_dict)
             return Response(serializer_dict, status=status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -136,12 +136,6 @@ class GetUsersAPIView(ListAPIView):
     queryset = User.objects.all()
 
     def get_queryset(self):
-        schema_name = self.request.headers['X_DTS_SCHEMA']
-        return User.objects.filter(temp_name=schema_name)
-
-
-class CheckJSONAPIView(APIView):
-    permission_classes = (IsAuthenticated, IsEmployee)
-
-    def get(self, request):
-        return Response({"Message": "Success"})
+        user = get_user(self.request)
+        schema_name = user.temp_name
+        return User.objects.filter(temp_name=schema_name).exclude(id=user.id)

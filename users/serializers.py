@@ -12,6 +12,8 @@ class BatchUploadSerializer(serializers.Serializer):
 
 
 class ProfileSerializer(serializers.ModelSerializer):
+    office_start_time = serializers.TimeField(format='%H:%M:%S', input_formats=['%I:%M%p', '%I:%M %p', '%H:%M:%S'], required=False, allow_null=True)
+    office_end_time = serializers.TimeField(format='%H:%M:%S', input_formats=['%I:%M%p', '%I:%M %p', '%H:%M:%S'], required=False, allow_null=True)
 
     class Meta:
         model = UserProfile
@@ -21,8 +23,6 @@ class ProfileSerializer(serializers.ModelSerializer):
 class ProfileSearchSerializer(serializers.ModelSerializer):
 
     name = serializers.SerializerMethodField()
-    
-
 
     class Meta:
         model = UserProfile

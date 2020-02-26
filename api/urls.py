@@ -11,4 +11,5 @@ urlpatterns = [
     path('property/', include('property.urls')),
     path('notification/', include('notifications.urls')),
     path('organization/', include('organization.urls')),
+    path('group/', include('groups.urls')),
 ]

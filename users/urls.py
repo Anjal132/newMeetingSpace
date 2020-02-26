@@ -2,7 +2,7 @@ from django.urls import include, path
 
 # from users.v1.apiViews import GetUsersSchemaAPIView
 from users.views import (GetProfileAPIView, GetSuggestionsAPIView,
-                         GetUsersAPIView, UserDetailAPIView, AddBatchEmployeeAPIView, CheckJSONAPIView)
+                         GetUsersAPIView, UserDetailAPIView, AddBatchEmployeeAPIView)
 
 urlpatterns = [
     path('v1/', include('users.v1.urls')),
@@ -12,6 +12,4 @@ urlpatterns = [
 
     path('v1/allusers/', GetUsersAPIView.as_view()),
     path('v1/user/<int:pk>/', UserDetailAPIView.as_view()),
-
-    path('v1/checkjson', CheckJSONAPIView.as_view()),
 ]

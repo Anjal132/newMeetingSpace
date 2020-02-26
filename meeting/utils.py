@@ -120,6 +120,7 @@ def get_events_from_google_calendar(meeting_uid):
             except:
                 print(participant.participant.email +
                       ' has not connected their google account')
+    print(events)
     return events
 
 
@@ -261,13 +262,13 @@ def get_suggestion(suggestion_date, suggestions, meeting, event_start_time, even
     suggestion_available = int(difference_in_minutes / duration)
 
     end_time = event_start_time
-
     for j in range(suggestion_available):
         suggestion_start_time = end_time.time()
         suggestion_end_time = (
             end_time + datetime.timedelta(minutes=duration)).time()
 
         if dt.now(local_tz) > end_time.replace(tzinfo=local_tz):
+            end_time = end_time + datetime.timedelta(minutes=duration)
             continue
 
         if room == -1:
@@ -304,14 +305,15 @@ def generate_suggestions(events, meeting_id, room):
     start_date = meeting.start_date
     end_date = meeting.end_date
     difference_in_date = end_date-start_date
+    user_profile = UserProfile.objects.get(user=meeting.host)
 
     for i in range(difference_in_date.days + 1):
         suggestion_date = start_date + datetime.timedelta(days=i)
 
         office_start_time = dt.strptime(suggestion_date.strftime(
-            '%Y-%m-%d') + '10:00:00', '%Y-%m-%d%H:%M:%S')
+            '%Y-%m-%d') + user_profile.office_start_time.isoformat(), '%Y-%m-%d%H:%M:%S')
         office_end_time = dt.strptime(suggestion_date.strftime(
-            '%Y-%m-%d') + '17:00:00', '%Y-%m-%d%H:%M:%S')
+            '%Y-%m-%d') + user_profile.office_end_time.isoformat(), '%Y-%m-%d%H:%M:%S')
 
         try:
             event_on_date = events[suggestion_date.isoformat()]
@@ -386,7 +388,7 @@ def meetings_details(meetings, filter_meeting, user, upcoming):
                 'end_time': meeting.end_time.strftime('%I:%M%p'),
                 'room': meeting.room.room_number,
                 'date': meeting.meeting_date,
-                'host': meeting.meeting.host == user
+                'host': meeting.meeting.host == user,
             }
 
             meeting_list.append(meeting_item)
@@ -407,6 +409,7 @@ def meetings_details(meetings, filter_meeting, user, upcoming):
 
 def root_suggestion(meeting_id, room_id):
     google_events = get_events_from_google_calendar(meeting_id)
+    print('Google Events{0}'.format(google_events))
 
     app_events = get_app_events(meeting_id)
     events = get_single_events_dict(google_events, app_events)

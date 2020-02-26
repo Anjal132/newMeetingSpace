@@ -12,6 +12,7 @@ from userProfile.models import UserProfile
 from users.models import User
 from ccalendar.models import Google, Outlook
 
+
 class ActiveInactiveUserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
@@ -32,17 +33,16 @@ class UserDetailSerializer(serializers.ModelSerializer):
         model = User
         fields = ('email', 'belongs_to')
 
+
 class UserProfileSerializer(serializers.ModelSerializer):
     # building = serializers.SlugRelatedField(read_only=True, slug_field='building')
     # department = serializers.SlugRelatedField(read_only=True, slug_field='department')
     """Serializer for User's profile"""
     class Meta:
         model = UserProfile
-        fields = ('building', 'department', 'first_name', 'middle_name', 'last_name', 'profile_pics')
+        fields = ('building', 'department', 'first_name',
+                  'middle_name', 'last_name', 'profile_pics')
         # fields = '__all__'
-
-        
-
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -50,25 +50,42 @@ class UserSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = UserProfile
-        fields = ('first_name', 'last_name', 'middle_name', 'internationalization', 'profile_pics')
+        fields = ('first_name', 'last_name', 'middle_name',
+                  'internationalization', 'profile_pics')
+
 
 class UserProfileDetailSerializer(serializers.ModelSerializer):
     """Serializer for User's profile"""
 
     # user = UserDetailSerializer(required=True)
     building = serializers.SlugRelatedField(slug_field='name', read_only=True)
-    department = serializers.SlugRelatedField(slug_field='department_name', read_only=True)
+    department = serializers.SlugRelatedField(
+        slug_field='department_name', read_only=True)
+    room = serializers.SlugRelatedField(
+        slug_field='room_number', read_only=True)
+    floor = serializers.SerializerMethodField()
     google_sign_in = serializers.SerializerMethodField()
     outlook_sign_in = serializers.SerializerMethodField()
-    
+    floors = serializers.SerializerMethodField()
+    office_start_time = serializers.TimeField(format='%I:%M %p')
+    office_end_time = serializers.TimeField(format='%I:%M %p')
+
     class Meta:
         model = UserProfile
-        fields = ('building', 'department', 'first_name', 'middle_name', 'last_name', 'internationalization', 'profile_pics', 'google_sign_in', 'outlook_sign_in')
+        fields = ('room', 'floor', 'floors', 'building', 'department', 'first_name', 'middle_name',
+                  'last_name', 'internationalization', 'profile_pics', 'google_sign_in', 'outlook_sign_in',
+                  'office_start_time', 'office_end_time')
+
+    def get_floor(self, obj):
+        return obj.room.floor
+
+    def get_floors(self, obj):
+        return obj.building.shared_company_floors
 
     def get_google_sign_in(self, obj):
         # user = get_user(self.request)
         user = User.objects.get(email=obj)
-        
+
         if Google.objects.filter(user=user).exists():
             goo = Google.objects.get(user=user)
             return goo.email
@@ -88,13 +105,16 @@ class StaffProfileDetailSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = StaffProfile
-        fields = ('first_name', 'middle_name', 'last_name', 'internationalization', 'profile_pics', 'user')
+        fields = ('first_name', 'middle_name', 'last_name',
+                  'internationalization', 'profile_pics', 'user')
+
 
 class StaffProfileSerializer(serializers.ModelSerializer):
     """Serializer for Staff's profile"""
     class Meta:
         model = StaffProfile
         fields = "__all__"
+
 
 class ResetPasswordSerializer(serializers.Serializer):
     """ Serializer to reset the own's password """
@@ -124,6 +144,7 @@ class UserProfileBuildingSerializer(serializers.ModelSerializer):
         model = UserProfile
         fields = ['building', 'department']
 
+
 class CreateEmployeeSerializer(serializers.ModelSerializer):
     """Serializer to invite the employee by Company Admin."""
 
@@ -146,8 +167,9 @@ class CreateEmployeeSerializer(serializers.ModelSerializer):
         user = User.objects.create_user(**validated_data)
 
         connection.set_schema(schema_name=user.temp_name)
-        UserProfile.objects.filter(user=user).update(building=building['building'], department=building['department'])
-        
+        UserProfile.objects.filter(user=user).update(
+            building=building['building'], department=building['department'])
+
         return user
 
 
@@ -212,12 +234,13 @@ class LoginResponseSerializer(serializers.Serializer):
         if obj.temp_name != 'public':
             connection.set_schema(schema_name=obj.temp_name)
             user_profile = UserProfile.objects.get(user=obj)
-            
+
             if user_profile.building is not None:
                 return obj.last_login
 
             return None
         return obj.last_login
+
 
 class RefreshTokenSerializer(serializers.Serializer):
     '''

@@ -19,6 +19,7 @@ class ProfileSerializer(serializers.ModelSerializer):
         model = UserProfile
         fields = '__all__'
 
+    
 
 class ProfileSearchSerializer(serializers.ModelSerializer):
 

@@ -46,6 +46,8 @@ class AvailableRoomsAPIView(generics.ListAPIView):
             building = Property.objects.get(id=user_profile.building.id)
         except ObjectDoesNotExist:
             return Room.objects.none()
+        except AttributeError:
+            return Room.objects.none()
 
         if floor is None:
             floor = building.shared_company_floors
@@ -95,7 +97,7 @@ class AllRoomsAPIView(generics.ListAPIView):
         active_rooms = self.request.query_params.get('active', None)
         room_type = self.request.query_params.get('roomType', None)
         floor = self.request.query_params.get('floor', None)
-
+        
         if property_id is None:
             return Room.objects.none()
 
@@ -106,8 +108,16 @@ class AllRoomsAPIView(generics.ListAPIView):
 
         if floor is None:
             floor = buildings.shared_company_floors
-        elif not floor in buildings.shared_company_floors:
-            return Room.objects.none()
+        else:
+            try:
+                floor = int(floor)
+
+                if floor not in buildings.shared_company_floors:
+                    return Room.objects.none()
+
+                floor = [floor]
+            except ValueError:
+                return Response({'Message': 'Floor must be integer'}, status=status.HTTP_400_BAD_REQUEST)
 
         room_type_list = ['CR', 'MR', 'PO', 'DH', 'BR']
         active_rooms_list = ['active', 'inactive']
@@ -143,10 +153,7 @@ Add property to an organization. Get all the properties of an organization.
 
 
 class PropertyAddView(generics.ListCreateAPIView):
-    # permission_classes = (IsAuthenticated, IsCompanyAdmin,)
-    authentication_classes = ()
-    permission_classes = ()
-    # queryset = Property.objects.all()
+    permission_classes = (IsAuthenticated, IsCompanyAdmin,)
     serializer_class = PropertySerializer
 
     def get_queryset(self):

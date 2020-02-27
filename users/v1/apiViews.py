@@ -1,6 +1,7 @@
 import json
 
 from django.contrib.auth import user_logged_in
+from django.http import HttpResponse
 from django.core import serializers
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
@@ -59,10 +60,12 @@ class AuthViewSet(MultipleSerializerMixin, viewsets.GenericViewSet):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         user = authenticate_user(**serializer.validated_data)
-        user_logged_in.send(sender=user.__class__, request=self.request, user=user)
+        user_logged_in.send(sender=user.__class__,
+                            request=self.request, user=user)
         data = LoginResponseSerializer(user).data
         cookie = 'token=' + data['access_token'] + \
             '; path=/; HttpOnly; max-age=86400; SameSite=None;'
+
         return Response(data, status=status.HTTP_200_OK, headers={'Set-Cookie': cookie})
 
     @action(methods=['POST', ], detail=False, permission_classes=[IsAuthenticated, ])
@@ -74,7 +77,7 @@ class AuthViewSet(MultipleSerializerMixin, viewsets.GenericViewSet):
         user.save()
         return Response({"status": "Success"}, status=status.HTTP_204_NO_CONTENT)
 
-    @action(methods=['POST', ], detail=False, permission_classes=[IsAuthenticated, IsCompanyAdmin,])
+    @action(methods=['POST', ], detail=False, permission_classes=[IsAuthenticated, IsCompanyAdmin, ])
     def resend_confirmation(self, request):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -83,6 +86,7 @@ class AuthViewSet(MultipleSerializerMixin, viewsets.GenericViewSet):
         check = verify_further(employee, organization)
         if check:
             return Response({"status": "Success"}, status=status.HTTP_202_ACCEPTED)
+        return Response({"status":"Failed"}, status=status.HTTP_400_BAD_REQUEST)
 
     @action(methods=['POST', ], detail=False, authentication_classes=())
     def reset_password(self, request):
@@ -91,7 +95,8 @@ class AuthViewSet(MultipleSerializerMixin, viewsets.GenericViewSet):
         user = get_user_by_email(serializer.validated_data['email'])
         send_password_reset_email(user)
         return Response(
-            {"status": "Success", "message": "A password reset link has been sent to your email"},
+            {"status": "Success",
+                "message": "A password reset link has been sent to your email"},
             status=status.HTTP_200_OK
         )
 
@@ -136,11 +141,13 @@ class AuthViewSet(MultipleSerializerMixin, viewsets.GenericViewSet):
     def get_user_detail(self, request):
         user = get_user(self.request)
         if user.is_superuser:
-            return Response({"message":"Superuser has no profile"})    
+            return Response({"message": "Superuser has no profile"})
         if user.is_staff:
-            serializer = StaffProfileDetailSerializer(self.get_queryset().first())    
+            serializer = StaffProfileDetailSerializer(
+                self.get_queryset().first())
         else:
-            serializer = UserProfileDetailSerializer(self.get_queryset().first())
+            serializer = UserProfileDetailSerializer(
+                self.get_queryset().first())
         return Response(serializer.data)
 
     @action(methods=['GET', ], detail=False, permission_classes=[IsAuthenticated, ])
@@ -169,5 +176,5 @@ class AuthViewSet(MultipleSerializerMixin, viewsets.GenericViewSet):
                 return UserProfile.objects.filter(user=user)
         if self.action == 'list_user':
             user = get_all_user(self.request)
-            
+
             return UserProfile.objects.filter(user_id__in=user)

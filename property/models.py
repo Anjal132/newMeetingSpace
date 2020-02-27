@@ -17,8 +17,8 @@ class Property(models.Model):
     latitude = models.CharField(max_length=50, blank=True, null=True)
     longitude = models.CharField(max_length=50, blank=True, null=True)
     is_shared = models.BooleanField(default=False)
-    no_of_floors = models.CharField(max_length=25, blank=True, null=False)
-    shared_company_floors = JSONField(blank=True, null=True)
+    no_of_floors = models.CharField(max_length=25, null=False)
+    shared_company_floors = JSONField()
     is_available = models.CharField(max_length=2, choices=IS_AVAILABLE)
 
     def __str__(self):

@@ -1,5 +1,4 @@
-from datetime import datetime
-
+import pytz, datetime
 from django.conf import settings
 from django.core.exceptions import ObjectDoesNotExist
 from rest_framework import filters, status
@@ -11,48 +10,47 @@ from rest_framework.views import APIView
 from permission.permissions import IsCompanyAdmin, IsEmployee
 from userProfile.models import UserProfile
 from users.models import User
-from users.serializers import (BatchUploadSerializer, ProfileSearchSerializer,
+from users.serializers import (ProfileSearchSerializer,
                                ProfileSerializer)
-from users.tasks import add_batch_users
 from users.v1.apiSerializers import (ActiveInactiveUserSerializer,
                                      UserListSerializer)
 from utils.utils import get_user
 
 
-class AddBatchEmployeeAPIView(APIView):
-    authentication_classes = ()
-    permission_classes = ()
+# class AddBatchEmployeeAPIView(APIView):
+#     authentication_classes = ()
+#     permission_classes = ()
 
-    '''
-    from django.db import connection
-    import requests
-    schema_name = ''
-    url = 'http://localhost:8000/auth/v1/add_batch_users'
-    connection.set_schema(schema_name=schema_name)
-    files = {'file': open('/home/ojha/file.csv', 'rb')}
-    values = {'building':2, 'department':2}
-    r = requests.post(url)
-    '''
+#     '''
+#     from django.db import connection
+#     import requests
+#     schema_name = ''
+#     url = 'http://localhost:8000/auth/v1/add_batch_users'
+#     connection.set_schema(schema_name=schema_name)
+#     files = {'file': open('/home/ojha/file.csv', 'rb')}
+#     values = {'building':2, 'department':2}
+#     r = requests.post(url)
+#     '''
 
-    def post(self, request):
-        print(request.headers)
-        print(request.data)
+#     def post(self, request):
+#         print(request.headers)
+#         print(request.data)
 
-        serializer = BatchUploadSerializer(data=request.data)
+#         serializer = BatchUploadSerializer(data=request.data)
 
-        if(serializer.is_valid()):
-            print(serializer.validated_data)
-            file = serializer.validated_data['file']
+#         if(serializer.is_valid()):
+#             print(serializer.validated_data)
+#             file = serializer.validated_data['file']
 
-            filename = settings.BASE_DIR + '/csv/' + \
-                str(datetime.timestamp(datetime.now())) + file.name
-            with open(filename, 'wb+') as destination:
-                for chunk in file.chunks():
-                    destination.write(chunk)
+#             filename = settings.BASE_DIR + '/csv/' + \
+#                 str(datetime.timestamp(datetime.now())) + file.name
+#             with open(filename, 'wb+') as destination:
+#                 for chunk in file.chunks():
+#                     destination.write(chunk)
 
-            add_batch_users.delay(filename)
-            return Response({'Message': 'Successfully uploaded. Please refresh the page to see changes.'}, status=200)
-        return Response({'Message': serializer.errors}, status=400)
+#             add_batch_users.delay(filename)
+#             return Response({'Message': 'Successfully uploaded. Please refresh the page to see changes.'}, status=200)
+#         return Response({'Message': serializer.errors}, status=400)
 
 
 class UserDetailAPIView(RetrieveUpdateAPIView):
@@ -106,8 +104,12 @@ class GetProfileAPIView(APIView):
 
     def put(self, request):
         user = get_user(request)
-
-        request.data['user'] = user.id
+        try:
+            request.data._mutable = True
+            request.data['user'] = user.id
+            request.data._mutable = False
+        except AttributeError:
+            request.data['user'] = user.id
 
         try:
             instance = UserProfile.objects.get(user=user)
@@ -117,15 +119,63 @@ class GetProfileAPIView(APIView):
         serializer = ProfileSerializer(instance=instance, data=request.data)
 
         if serializer.is_valid():
+            validated_data = serializer.validated_data
+            building = validated_data.pop('building', None)
+
+            office_start_time = validated_data.pop('office_start_time', None)
+            office_end_time = validated_data.pop('office_end_time', None)
+
+            if office_start_time is not None or office_end_time is not None:
+                if office_start_time is None or office_end_time is None:
+                    return Response({'Message': 'Office start time and office end time are both required'}, status=status.HTTP_400_BAD_REQUEST)
+                
+                now = datetime.datetime.now(tz=pytz.timezone(instance.timezone))
+                
+                office_start_time = now.replace(hour=office_start_time.hour, minute=office_start_time.minute, second=0, microsecond=0)
+                office_end_time = now.replace(hour=office_end_time.hour, minute=office_end_time.minute, second=0, microsecond=0)
+
+                validated_data['office_start_time'] = office_start_time.astimezone(pytz.UTC).time()
+                validated_data['office_end_time'] = office_end_time.astimezone(pytz.UTC).time()
+
+            if building is None and instance.building is None:
+                if 'room' in validated_data or 'floor' in validated_data:
+                    return Response({'Message': 'Cannot add room or floor without building'}, status=status.HTTP_400_BAD_REQUEST)
+
+            if building is not None or instance.building is not None:
+                if building is None:
+                    building = instance.building
+                elif building.is_available == 'SD':
+                    return Response({'Message': 'The building has already been shut down'}, status=status.HTTP_400_BAD_REQUEST)
+
+                if 'room' in validated_data:
+                    room = validated_data['room']
+
+                    if building.id != room.property.id:
+                        return Response({'Message': 'Room does not exist on the building'}, status=status.HTTP_400_BAD_REQUEST)
+
+                    if room.room_type != 'PO':
+                        return Response({'Message': 'Room is not a private office'}, status=status.HTTP_400_BAD_REQUEST)
+
+                    if not room.is_active:
+                        return Response({'Message': 'Room is not active'}, status=status.HTTP_400_BAD_REQUEST)
+
+                validated_data['building'] = building
+
             serializer.save()
             serializer_dict = serializer.data
+            serializer_dict['profile_set'] = True
+            serializer_dict['workplace_set'] = True
 
-            serializer_dict['last_login'] = user.last_login
+            if instance.get_full_name is None:
+                serializer_dict['profile_set'] = False
 
             if instance.building is None:
-                serializer_dict['last_login'] = None
+                serializer_dict['workplace_set'] = False
 
             serializer_dict['message'] = 'Profile successfully updated'
+            serializer_dict.pop('id')
+            serializer_dict.pop('user')
+
             return Response(serializer_dict, status=status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 

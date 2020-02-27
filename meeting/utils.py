@@ -409,7 +409,7 @@ def meetings_details(meetings, filter_meeting, user, upcoming):
 
 def root_suggestion(meeting_id, room_id):
     google_events = get_events_from_google_calendar(meeting_id)
-    print('Google Events{0}'.format(google_events))
+    print('Google Events {0}'.format(google_events))
 
     app_events = get_app_events(meeting_id)
     events = get_single_events_dict(google_events, app_events)

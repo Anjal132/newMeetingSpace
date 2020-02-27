@@ -110,7 +110,7 @@ WSGI_APPLICATION = 'meetingSpace.wsgi.application'
 DATABASES = {
     'default': {                # New
         'ENGINE': 'tenant_schemas.postgresql_backend',
-        'NAME': 'demo_meeting',
+        'NAME': 'meeting',
         'USER': 'meeting',
         'PASSWORD': 'meeting@t4tech',
         'HOST': 'localhost',
@@ -230,7 +230,7 @@ TENANT_MODEL = 'organization.Organization'
 
 SITE_ID = 1
 
-ACCESS_TOKEN_EXPIRY_TIME = 1500       # Minutes
+ACCESS_TOKEN_EXPIRY_TIME = 1500      # Minutes
 
 REFRESH_TOKEN_EXPIRY_TIME = 15       # Days
 

@@ -20,6 +20,7 @@ class CreateCompanyAPIView(generics.CreateAPIView):
     def perform_create(self, serializer):
         print(self.request.data)
         short_name = self.request.data['short_name']
+        short_name = short_name.replace(" ", "")
         schema_name = short_name.lower()+'schema'
         domain_url = 'www.'+short_name+'.com'
         organization = serializer.save(

@@ -1,6 +1,6 @@
 from rest_framework import permissions
 from django.contrib.auth.models import Group
-from utils.utils import decode_jwt_cookie
+from utils.utils import decode_jwt_cookie, get_user
 
 class IsStaffUser(permissions.BasePermission):
     def has_permission(self, request, view):
@@ -15,6 +15,15 @@ class IsStaffUser(permissions.BasePermission):
 
 class IsCompanyAdmin(permissions.BasePermission):
     def has_permission(self, request, view):
+        user = get_user(request)
+
+        schema_name = request.META.get('HTTP_X_DTS_SCHEMA', None)
+        if schema_name is None:
+            return False
+        
+        if schema_name is not None:
+            if user.temp_name != schema_name:
+                return False
 
         payload = decode_jwt_cookie(request)
         uid = Group.objects.get(name="Admin_User").uid
@@ -27,6 +36,15 @@ class IsCompanyAdmin(permissions.BasePermission):
 
 class IsEmployee(permissions.BasePermission):
     def has_permission(self, request, view):
+        user = get_user(request)
+
+        schema_name = request.META.get('HTTP_X_DTS_SCHEMA', None)
+        
+        if schema_name is None:
+            return False
+
+        if user.temp_name != schema_name:
+            return False
 
         payload = decode_jwt_cookie(request)
         uid = Group.objects.get(name="Employee_User").uid

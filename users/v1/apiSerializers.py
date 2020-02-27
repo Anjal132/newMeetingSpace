@@ -77,10 +77,14 @@ class UserProfileDetailSerializer(serializers.ModelSerializer):
                   'office_start_time', 'office_end_time')
 
     def get_floor(self, obj):
-        return obj.room.floor
+        if obj.room is not None:
+            return obj.room.floor
+        return None
 
     def get_floors(self, obj):
-        return obj.building.shared_company_floors
+        if obj.building is not None:
+            return obj.building.shared_company_floors
+        return None
 
     def get_google_sign_in(self, obj):
         # user = get_user(self.request)
@@ -200,7 +204,8 @@ class LoginResponseSerializer(serializers.Serializer):
     expiry_time = serializers.SerializerMethodField()
     schema_name = serializers.SerializerMethodField()
     user_type = serializers.SerializerMethodField()
-    last_login = serializers.SerializerMethodField()
+    profile_set = serializers.SerializerMethodField()
+    workplace_set = serializers.SerializerMethodField()
 
     def get_schema_name(self, obj):
         return obj.temp_name
@@ -230,16 +235,27 @@ class LoginResponseSerializer(serializers.Serializer):
             group = 'Employee'
         return group
 
-    def get_last_login(self, obj):
+    def get_profile_set(self, obj):
+        if obj.temp_name != 'public':
+            connection.set_schema(schema_name=obj.temp_name)
+            user_profile = UserProfile.objects.get(user=obj)
+
+            if user_profile.get_full_name is not None:
+                return True
+
+            return False
+        return True
+    
+    def get_workplace_set(self, obj):
         if obj.temp_name != 'public':
             connection.set_schema(schema_name=obj.temp_name)
             user_profile = UserProfile.objects.get(user=obj)
 
             if user_profile.building is not None:
-                return obj.last_login
+                return True
 
-            return None
-        return obj.last_login
+            return False
+        return True
 
 
 class RefreshTokenSerializer(serializers.Serializer):

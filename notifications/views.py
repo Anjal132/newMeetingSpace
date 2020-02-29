@@ -17,9 +17,9 @@ class NotificationReadAPIView(APIView):
 
     def get(self, request, *args, **kwargs):
         user = get_user(request)
-        unread = Notification.objects.filter(user=user).filter(read=False)
+        unread = Notification.objects.filter(user=user).filter(read=False).count()
 
-        return Response({'Unread':unread.exists()}, status=status.HTTP_200_OK)
+        return Response({'Unread': unread}, status=status.HTTP_200_OK)
 
 
 class AllNotificationsAPIView(ListAPIView):

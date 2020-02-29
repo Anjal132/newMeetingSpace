@@ -10,6 +10,7 @@ from meeting.models import Details
 from permission.permissions import IsCompanyAdmin, IsEmployee
 from userProfile.models import UserProfile
 from utils.utils import get_user
+from pagination.pagination import SmallResultsSetPagination
 
 from .models import Department, Property, Room
 from .serializers import (DepartmentSerializer, PropertySerializer,
@@ -24,6 +25,7 @@ Get all available rooms
 class AvailableRoomsAPIView(generics.ListAPIView):
     permission_classes = [IsAuthenticated, IsEmployee]
     serializer_class = RoomSerializer
+    pagination_class = SmallResultsSetPagination
 
     def get_queryset(self):
         user = get_user(self.request)
@@ -55,7 +57,7 @@ class AvailableRoomsAPIView(generics.ListAPIView):
             return Room.objects.none()
 
         room_type = []
-        room_type_list = ['CR', 'MR', 'PO', 'DH', 'BR']
+        room_type_list = ['CR', 'MR', 'PO', 'DH']
         if room_type_query is None:
             room_type = room_type_list
         elif not room_type_query in room_type_list:
@@ -84,13 +86,14 @@ class AvailableRoomsAPIView(generics.ListAPIView):
                     exclude_rooms.append(meeting.room.id)
 
         if booked == 'booked':
-            return Room.objects.filter(property=user_profile.building, room_type__in=room_type, floor__in=floor, id__in=booked_rooms, is_active=True)
-        return Room.objects.filter(property=user_profile.building, room_type__in=room_type, floor__in=floor, is_active=True).exclude(id__in=exclude_rooms)
+            return Room.objects.filter(property=user_profile.building, room_type__in=room_type, floor__in=floor, id__in=booked_rooms, is_active=True).order_by('floor')
+        return Room.objects.filter(property=user_profile.building, room_type__in=room_type, floor__in=floor, is_active=True).exclude(id__in=exclude_rooms).order_by('floor')
 
 
 class AllRoomsAPIView(generics.ListAPIView):
     permission_classes = [IsAuthenticated, IsEmployee]
     serializer_class = BookedRoomSerializer
+    pagination_class = SmallResultsSetPagination
 
     def get_queryset(self):
         property_id = self.request.query_params.get('property', None)
@@ -132,20 +135,19 @@ class AllRoomsAPIView(generics.ListAPIView):
             if not active_rooms in active_rooms_list or not room_type in room_type_list:
                 return Room.objects.none()
 
-            return Room.objects.filter(property=property_id, room_type=room_type, is_active=is_active, floor__in=floor)
+            return Room.objects.filter(property=property_id, room_type=room_type, is_active=is_active, floor__in=floor).order_by('floor')
 
         if room_type is not None:
             if room_type in room_type_list:
-                return Room.objects.filter(property=property_id, room_type=room_type, floor__in=floor)
+                return Room.objects.filter(property=property_id, room_type=room_type, floor__in=floor).order_by('floor')
             return Room.objects.none()
 
         if active_rooms is not None:
             if active_rooms in active_rooms_list:
-                return Room.objects.filter(property=property_id, is_active=is_active, floor__in=floor)
+                return Room.objects.filter(property=property_id, is_active=is_active, floor__in=floor).order_by('floor')
             return Room.objects.none()
 
-        return Room.objects.filter(property=property_id, floor__in=floor)
-
+        return Room.objects.filter(property=property_id, floor__in=floor).order_by('floor')
 
 '''
 Add property to an organization. Get all the properties of an organization.

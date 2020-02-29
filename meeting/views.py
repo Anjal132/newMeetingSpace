@@ -69,7 +69,6 @@ class HostMeetingView(generics.CreateAPIView):
     serializer_class = MeetingHostSerializer
 
     def create(self, request, *args, **kwargs):
-        print('Create{0}'.format(request.data))
         user = get_user(request)
         room = request.data.pop('room', None)
 

@@ -1,4 +1,4 @@
-from django.core.exceptions import ObjectDoesNotExist
+from django.core.exceptions import ObjectDoesNotExist, ValidationError
 from rest_framework import serializers
 
 from notifications.models import Notification
@@ -61,7 +61,7 @@ class MeetingHostSerializer(serializers.ModelSerializer):
     class Meta:
         model = Host
         fields = ('uid', 'title', 'agenda', 'duration', 'start_date',
-                  'end_date', 'type', 'meeting_to_participant', 'timezone')
+                  'end_date', 'type', 'meeting_to_participant')
         read_only_fields = ('uid', )
 
     def create(self, validated_data):
@@ -79,6 +79,10 @@ class MeetingHostSerializer(serializers.ModelSerializer):
                 participant_meeting = Status.objects.filter(meeting_host=host, participant=userid)
 
                 if not participant_meeting.exists():
+                    if userid.temp_name != host.host.temp_name:
+                        message = 'User does not exist'
+                        raise ValidationError(message)
+
                     Status.objects.create(meeting_host=host, participant=userid)
             except ValueError:
                 if participant in send_email_to_other_participants:
@@ -86,7 +90,8 @@ class MeetingHostSerializer(serializers.ModelSerializer):
 
                 send_email_to_other_participants.append(participant)
             except ObjectDoesNotExist:
-                print('Invalid Participant ID')
+                message = 'User does not exist'
+                raise ValidationError(message)
 
         host.participant_email = send_email_to_other_participants
         host.save()

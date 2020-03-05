@@ -18,7 +18,6 @@ class Host(models.Model):
         ('IN', 'Initiated'),
         ('CO', 'Completed'),
         ('FI', 'Finalized'),
-        ('PO', 'Postponed'),
         ('ON', 'Ongoing'),
         ('CA', 'Canceled')
     )

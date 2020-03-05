@@ -1,11 +1,14 @@
-from rest_framework import generics
+from rest_framework import generics, status
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from rest_framework.views import APIView
 
 from organization.apiSerializers import (CompanyProfileSerializer,
                                          CompanyStatusSerializer,
                                          CreateCompanySerializer)
 from organization.models import Organization
 from permission.permissions import IsCompanyAdmin, IsStaffUser
+from users.models import User
 from utils.otherUtils import send_mail_admin
 from utils.utils import get_user
 
@@ -52,8 +55,38 @@ class CompanyProfileAPIView(generics.RetrieveUpdateAPIView):
     serializer_class = CompanyProfileSerializer
 
     def get_object(self):
+        print(self.request.data)
         user = get_user(self.request)
         
         if user.temp_name == 'public':
             return Organization.objects.none()
         return Organization.objects.get(schema_name=user.temp_name)
+    
+
+class CompanyDashboardAPIVew(APIView):
+    permission_classes = [IsAuthenticated, IsStaffUser]
+    
+    def get(self, request, *args, **kwargs):
+        total_companies = Organization.objects.all().exclude(schema_name='public').count()
+        active_companies = Organization.objects.filter(is_active=True).exclude(schema_name='public').count()
+        on_trial_companies = Organization.objects.filter(on_trial=True).exclude(schema_name='public').count()
+        total_users = User.objects.all().exclude(temp_name='public').count()
+        total_active_users = User.objects.filter(is_active=True).exclude(temp_name='public').count()
+        company_users_count = []
+        all_companies = Organization.objects.all().exclude(schema_name='public')
+
+        for company in all_companies:
+            data = {
+                'company_name': company.name,
+                'active_users': User.objects.filter(is_active=True, temp_name=company.schema_name).count()
+            }
+            company_users_count.append(data)
+        
+        return Response({
+            'total_companies':total_companies,
+            'active_companies': active_companies, 
+            'on_trial_companies': on_trial_companies,
+            'total_users': total_users,
+            'total_active_users': total_active_users,
+            'company_users': company_users_count
+        }, status=status.HTTP_200_OK)

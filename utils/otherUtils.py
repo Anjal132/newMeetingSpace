@@ -43,6 +43,37 @@ def send_meeting_mail(participant_list, meeting, details):
     send_mail(mail_subject, message, 'admin@meetingspace.com', participant_list, fail_silently=False)
 
 
+def canceled_meeting_mail(meeting, details):
+    full_name = UserProfile.objects.get(user=meeting.host).get_full_name
+    schema_name = Organization.objects.get(schema_name=connection.get_schema())
+
+    mail_subject = '{0} has been cancelled'.format(meeting.title)
+    
+    meeting_start_time = datetime.datetime.combine(details.meeting_date, details.start_time)
+    meeting_end_time = datetime.datetime.combine(details.meeting_date, details.end_time)
+
+    meeting_start_time = meeting_start_time.astimezone(pytz.timezone(meeting.timezone))
+    meeting_end_time = meeting_end_time.astimezone(pytz.timezone(meeting.timezone))
+
+    message = render_to_string('send_meeting_email.html', {
+        'meeting_title': meeting.title,
+        'meeting_start_time': meeting_start_time.strftime('%H:%M%p'),
+        'meeting_end_time': meeting_end_time.strftime('%H:%M%p'),
+        'meeting_room': details.room.room_number,
+        'floor': details.room.floor,
+        'meeting_host': full_name,
+        'company_name': schema_name.name,
+        'property_location': details.room.property.name,
+        'meeting_date': details.meeting_date,
+        'street': details.room.property.street,
+        'city': details.room.property.city,
+        'country': details.room.property.country
+    })
+
+    send_mail(mail_subject, message, 'admin@meetingspace.com', meeting.participant_email, fail_silently=False)
+
+
+
 def send_mail_admin(admin_list, company_name):
     
     for admin in admin_list:

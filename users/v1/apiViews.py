@@ -93,6 +93,8 @@ class AuthViewSet(MultipleSerializerMixin, viewsets.GenericViewSet):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         user = get_user_by_email(serializer.validated_data['email'])
+        if not user.is_active:
+            return Response({'Message': 'The user is not active. Contact your admin.'}, status=status.HTTP_400_BAD_REQUEST)
         send_password_reset_email(user)
         return Response(
             {"status": "Success",

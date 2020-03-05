@@ -1,19 +1,40 @@
 import datetime
-import random
 from datetime import datetime as dt
 from urllib.parse import quote
 
 import pytz
 import requests
+from django.core.exceptions import ObjectDoesNotExist
 
 from ccalendar.models import Google
 from meeting.models import Details, Host, Status
 from property.models import Room
 from userProfile.models import UserProfile
 
+def is_participant(meeting_id, participant):
+    meeting = Status.objects.filter(meeting_host=meeting_id, participant=participant)
+    return meeting.exists()
 
-def encode_timezone_aware_datetime(datetimes, timezone):
-    tzone = pytz.timezone(timezone)
+def is_meeting_valid(meeting, invalid_meeting_param):
+    invalid_meeting = True
+    if meeting.meeting_status in invalid_meeting_param and meeting.meeting_status == 'CO':
+        message = 'The meeting is already complete'
+    elif meeting.meeting_status in invalid_meeting_param and meeting.meeting_status == 'CA':
+        message = 'The meeting has been cancelled'
+    elif meeting.meeting_status in invalid_meeting_param and meeting.meeting_status == 'ON':
+        message = 'The meeting is currently ongoing'
+    elif meeting.meeting_status in invalid_meeting_param and meeting.meeting_status == 'FI':
+        message = 'The meeting has already been finalized and cannot be postponed'
+    else:
+        message = 'The meeting has been called'
+        invalid_meeting = False
+    
+    return message, invalid_meeting
+
+
+
+def encode_timezone_aware_datetime(datetimes):
+    tzone = pytz.timezone('UTC')
     local_time = tzone.localize(datetimes).isoformat()
     encode_local_time = quote(local_time)
     return encode_local_time
@@ -34,8 +55,8 @@ def create_dict_of_events(events, events_dict):
         event_end_time = (event_end[1].split('+'))[0]
 
         event = {
-            'start_time': event_start_time,
-            'end_time': event_end_time
+            'start_time': event_start_time.replace('Z', ''),
+            'end_time': event_end_time.replace('Z', '')
         }
 
         if previous_date != event_start_date:
@@ -59,7 +80,7 @@ def create_dict_of_events(events, events_dict):
 
 
 def get_events_from_google_calendar(meeting_uid):
-    url = 'https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMax={0}&timeMin={1}&orderBy=startTime&singleEvents=True'
+    url = 'https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMax={0}&timeMin={1}&orderBy=startTime&singleEvents=True&timeZone=UTC'
     host = Host.objects.get(uid=meeting_uid)
     user_profile = UserProfile.objects.get(user=host.host)
 
@@ -70,12 +91,12 @@ def get_events_from_google_calendar(meeting_uid):
     office_start_datetime = datetime.datetime.combine(
         host.start_date, start_time)
     office_start_time = encode_timezone_aware_datetime(
-        office_start_datetime, host.timezone)
+        office_start_datetime)
 
     office_end_datetime = datetime.datetime.combine(
         host.end_date, end_time)
     office_end_time = encode_timezone_aware_datetime(
-        office_end_datetime, host.timezone)
+        office_end_datetime)
 
     events = {}
 
@@ -89,13 +110,11 @@ def get_events_from_google_calendar(meeting_uid):
         try:
             res = requests.get(url, headers)
             google_events = res.json()
-
             events = create_dict_of_events(google_events['items'], events)
-
         except:
             print('An error occured')
 
-    except:
+    except ObjectDoesNotExist:
         print(host.host.email + ' has not connected their google account')
     finally:
         participants = Status.objects.filter(meeting_host=host)
@@ -117,10 +136,9 @@ def get_events_from_google_calendar(meeting_uid):
 
                 except:
                     print('An error occured')
-            except:
+            except ObjectDoesNotExist:
                 print(participant.participant.email +
                       ' has not connected their google account')
-    print(events)
     return events
 
 
@@ -225,20 +243,29 @@ def get_empty_room(date, start_time, end_time, meeting):
 
     members = len(meeting.participant_email)
     members += Status.objects.filter(meeting_host=meeting).count()
+    members += 1
 
     if meeting_type != 'CF':
         remaining_rooms = Room.objects.filter(property=user_profile.building, room_type__in=[
                                               'MR', 'PO', 'DH'], room_capacity__gte=members, is_active=True).exclude(id__in=booked_room_list)
+        rooms = Room.objects.filter(property=user_profile.building, room_type__in=[
+                                              'MR', 'PO', 'DH'], room_capacity__gte=members, is_active=True).exclude(id__in=booked_room_list).values_list('id', 'room_capacity')
+                                              
     else:
         remaining_rooms = Room.objects.filter(
             property=user_profile.building, room_type='CR', room_capacity__gte=members, is_active=True).exclude(id__in=booked_room_list)
+        rooms = Room.objects.filter(
+            property=user_profile.building, room_type='CR', room_capacity__gte=members, is_active=True).exclude(id__in=booked_room_list).values_list('id', 'room_capacity')
 
     if not remaining_rooms.exists():
         remaining_rooms = Room.objects.filter(
             property=user_profile.building, room_capacity__gte=members, is_active=True).exclude(id__in=booked_room_list)
+        rooms = Room.objects.filter(
+            property=user_profile.building, room_capacity__gte=members, is_active=True).exclude(id__in=booked_room_list).values_list('id', 'room_capacity')
 
     if remaining_rooms.exists():
-        return random.choice(remaining_rooms)
+        room = rooms[min(range(len(rooms)), key=lambda i: abs(rooms[i][1]-members))]
+        return Room.objects.get(id=room[0])
     return None
 
 
@@ -256,8 +283,6 @@ def get_suggestion(suggestion_date, suggestions, meeting, event_start_time, even
     difference = event_end_time - event_start_time
     difference_in_minutes = int(difference.seconds/60)
     duration = meeting.duration
-    tzone = meeting.timezone
-    local_tz = pytz.timezone(tzone)
     duration = int(duration.seconds / 60)
     suggestion_available = int(difference_in_minutes / duration)
 
@@ -266,10 +291,6 @@ def get_suggestion(suggestion_date, suggestions, meeting, event_start_time, even
         suggestion_start_time = end_time.time()
         suggestion_end_time = (
             end_time + datetime.timedelta(minutes=duration)).time()
-
-        if dt.now(local_tz) > end_time.replace(tzinfo=local_tz):
-            end_time = end_time + datetime.timedelta(minutes=duration)
-            continue
 
         if room == -1:
             empty_room = get_empty_room(
@@ -282,17 +303,31 @@ def get_suggestion(suggestion_date, suggestions, meeting, event_start_time, even
             print('Room not found on {0}'.format(suggestion_date))
             continue
 
+        round_down = end_time.minute
+        if round_down % 5 != 0:
+            if round_down % 5 == 1:
+                end_time = end_time-datetime.timedelta(minutes=1)
+            if round_down % 5 == 2:
+                end_time = end_time-datetime.timedelta(minutes=2)
+            if round_down % 5 == 3:
+                end_time = end_time+datetime.timedelta(minutes=2)
+            if round_down % 5 == 4:
+                end_time = end_time+datetime.timedelta(minutes=1)
+
+
+
         suggestion = {
             'date': suggestion_date.isoformat(),
-            'start_time': end_time.strftime('%I:%M%p'),
-            'end_time': (end_time + datetime.timedelta(minutes=duration)).strftime('%I:%M%p'),
+            'start_time': end_time.strftime('%I:%M %p'),
+            'end_time': (end_time + datetime.timedelta(minutes=duration)).strftime('%I:%M %p'),
             'room_number': empty_room.room_number,
-            'room_id': empty_room.id
+            'room_id': empty_room.id,
+            'building': empty_room.property.name
         }
 
         suggestions.append(suggestion)
         end_time = dt.strptime(suggestion_date.strftime(
-            '%Y-%m-%d') + suggestion['end_time'], '%Y-%m-%d%I:%M%p')
+            '%Y-%m-%d') + suggestion['end_time'], '%Y-%m-%d%I:%M %p')
 
     return suggestions
 
@@ -300,69 +335,103 @@ def get_suggestion(suggestion_date, suggestions, meeting, event_start_time, even
 def generate_suggestions(events, meeting_id, room):
     meeting = Host.objects.get(uid=meeting_id)
 
+    difference_in_date = meeting.end_date - meeting.start_date
+    user_profile = UserProfile.objects.get(user=meeting.host)
+    today = datetime.datetime.now(pytz.UTC)
+    today = today.replace(second=0, microsecond=0)
+
     suggestions = []
 
-    start_date = meeting.start_date
-    end_date = meeting.end_date
-    difference_in_date = end_date-start_date
-    user_profile = UserProfile.objects.get(user=meeting.host)
-
+    '''
+    To get all the events within the suggested dates.
+    '''
     for i in range(difference_in_date.days + 1):
-        suggestion_date = start_date + datetime.timedelta(days=i)
+        no_suggestions_on_day = True
+        suggestion_date = meeting.start_date + datetime.timedelta(days=i)
+        office_start_time = datetime.datetime.combine(suggestion_date, user_profile.office_start_time, tzinfo=pytz.UTC)
+        office_end_time = datetime.datetime.combine(suggestion_date, user_profile.office_end_time, tzinfo=pytz.UTC)
 
-        office_start_time = dt.strptime(suggestion_date.strftime(
-            '%Y-%m-%d') + user_profile.office_start_time.isoformat(), '%Y-%m-%d%H:%M:%S')
-        office_end_time = dt.strptime(suggestion_date.strftime(
-            '%Y-%m-%d') + user_profile.office_end_time.isoformat(), '%Y-%m-%d%H:%M:%S')
-
+        #If office time is in night time
+        if office_start_time > office_end_time:
+            office_end_time = datetime.datetime.combine(suggestion_date+datetime.timedelta(days=1), user_profile.office_end_time, tzinfo=pytz.UTC)
+        
+        #If meeting is being hosted during office time, change office start time to current time
+        if office_start_time < today < office_end_time:
+            today = today + datetime.timedelta(minutes=15)
+            office_start_time = today
+        
+        #If office time has already ended, do not generate suggestions for today
+        if suggestion_date == today.date() and today > office_end_time:
+            continue
+        
         try:
-            event_on_date = events[suggestion_date.isoformat()]
+            '''
+            Get all events on suggestion date, if there are no events on a given date,
+            generate suggestions from office_start_time to office_end_time.
+            '''
+            events_on_date = events[suggestion_date.isoformat()]
+            
+            suggestion_start_time = office_start_time
+            suggestion_end_time = office_end_time
 
-            for index, event in enumerate(event_on_date):
+            for index, event in enumerate(events_on_date):
+                event_start_time = get_date_time(suggestion_date, event['start_time'])
+                event_end_time = get_date_time(suggestion_date, event['end_time'])
 
-                event_start_time = dt.strptime(suggestion_date.strftime(
-                    '%Y-%m-%d') + event['start_time'], '%Y-%m-%d%H:%M:%S')
-                event_end_time = dt.strptime(suggestion_date.strftime(
-                    '%Y-%m-%d') + event['end_time'], '%Y-%m-%d%H:%M:%S')
-
-                if event_end_time < office_start_time or event_end_time >= office_end_time:
+                if event_end_time <= office_start_time:
+                    continue
+                    
+                if event_start_time >= office_end_time:
                     continue
 
-                if len(event_on_date) == 1:
-                    suggestions = get_suggestion(
-                        suggestion_date, suggestions, meeting, office_start_time, event_start_time, room)
-                    suggestions = get_suggestion(
-                        suggestion_date, suggestions, meeting, event_end_time, office_end_time, room)
-                else:
-                    if index == 0:
-                        if event_start_time > office_start_time:
-                            event_end_time = event_start_time
-                            event_start_time = office_start_time
+                if office_start_time < event_start_time < office_end_time:
+                    no_suggestions_on_day = False
+                    if index != 0:
+                        previous_event_end_time = get_date_time(suggestion_date, events_on_date[index-1]['end_time'])
+
+                        if office_start_time < previous_event_end_time < office_end_time:
+                            suggestion_start_time = previous_event_end_time
+                            suggestion_end_time = event_start_time
                         else:
-                            event_start_time = event_end_time
-                            event_end_time = dt.strptime(suggestion_date.strftime(
-                                '%Y-%m-%d') + event_on_date[index + 1]['start_time'], '%Y-%m-%d%H:%M:%S')
+                            suggestion_start_time = office_start_time
+                            suggestion_end_time = event_start_time
                     else:
-                        previous_event_end_time = dt.strptime(suggestion_date.strftime(
-                            '%Y-%m-%d') + event_on_date[index - 1]['end_time'], '%Y-%m-%d%H:%M:%S')
-                        if previous_event_end_time <= office_start_time:
-                            suggestions = get_suggestion(
-                                suggestion_date, suggestions, meeting, office_start_time, event_start_time, room)
+                        suggestion_start_time = office_start_time
+                        suggestion_end_time = event_start_time
+                    suggestions = get_suggestion(suggestion_date, suggestions, meeting, suggestion_start_time, suggestion_end_time, room)
 
-                        try:
-                            event_start_time = event_end_time
-                            event_end_time = dt.strptime(suggestion_date.strftime(
-                                '%Y-%m-%d') + event_on_date[index + 1]['start_time'], '%Y-%m-%d%H:%M:%S')
-                        except IndexError:
-                            event_end_time = office_end_time
-                    suggestions = get_suggestion(
-                        suggestion_date, suggestions, meeting, event_start_time, event_end_time, room)
+                if office_start_time < event_end_time < office_end_time:
+                    no_suggestions_on_day = False
+                    try:
+                        next_event_start_time = get_date_time(suggestion_date, events_on_date[index+1]['start_time'])
 
+                        if office_start_time < next_event_start_time < office_end_time:
+                            suggestion_start_time = event_end_time
+                            suggestion_end_time = next_event_start_time
+                        else:
+                            suggestion_start_time = event_end_time
+                            suggestion_end_time = office_end_time
+                    except IndexError:
+                        suggestion_start_time = event_end_time
+                        suggestion_end_time = office_end_time
+                    suggestions = get_suggestion(suggestion_date, suggestions, meeting, suggestion_start_time, suggestion_end_time, room)
+            
+            if no_suggestions_on_day:
+                suggestions = get_suggestion(suggestion_date, suggestions, meeting, office_start_time, office_end_time, room)
+                
         except KeyError:
-            suggestions = get_suggestion(
-                suggestion_date, suggestions, meeting, office_start_time, office_end_time, room)
-    print(suggestions)
+            suggestions = get_suggestion(suggestion_date, suggestions, meeting, office_start_time, office_end_time, room)
+        
     return suggestions
+
+
+'''
+Return datetime object when a datetime.date object, a time in isoformat and a timezone is passed
+'''
+def get_date_time(date, time, timezone='UTC'):
+    tzone = pytz.timezone(timezone)
+    date_time = datetime.datetime.combine(date, datetime.time.fromisoformat(time), tzinfo=tzone)
+    return date_time
 
 
 def meetings_details(meetings, filter_meeting, user, upcoming):
@@ -384,8 +453,8 @@ def meetings_details(meetings, filter_meeting, user, upcoming):
             meeting_item = {
                 'meeting_id': meeting.meeting.uid,
                 'title': meeting.meeting.title,
-                'start_time': meeting.start_time.strftime('%I:%M%p'),
-                'end_time': meeting.end_time.strftime('%I:%M%p'),
+                'start_time': meeting.start_time.strftime('%I:%M %p'),
+                'end_time': meeting.end_time.strftime('%I:%M %p'),
                 'room': meeting.room.room_number,
                 'date': meeting.meeting_date,
                 'host': meeting.meeting.host == user,
@@ -412,10 +481,11 @@ def root_suggestion(meeting_id, room_id):
     print('Google Events {0}'.format(google_events))
 
     app_events = get_app_events(meeting_id)
+    print('App Events {0}'.format(app_events))
+
     events = get_single_events_dict(google_events, app_events)
+    print('All Events {0}'.format(events))
 
     suggestions = generate_suggestions(events, meeting_id, room_id)
-
-
 
     return suggestions

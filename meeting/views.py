@@ -1,12 +1,16 @@
 import datetime
 
+import pytz
+from django.conf import settings
 from django.core.exceptions import ObjectDoesNotExist, ValidationError
+from pytz.exceptions import UnknownTimeZoneError
 from rest_framework import generics, status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from meeting.utils import meetings_details, root_suggestion
+from meeting.utils import (is_meeting_valid, is_participant, meetings_details,
+                           root_suggestion)
 from notifications.models import Notification
 from permission.permissions import IsEmployee
 from userProfile.models import UserProfile
@@ -14,7 +18,8 @@ from utils.otherUtils import send_meeting_mail
 from utils.utils import get_user
 
 from .models import Details, Host, Status
-from .serializers import DetailsSerializer, MeetingHostSerializer, HostSerializer
+from .serializers import (DetailsSerializer, HostSerializer,
+                          MeetingHostSerializer)
 
 
 '''
@@ -26,34 +31,36 @@ class MeetingOnDateAPIView(APIView):
     permission_classes = [IsAuthenticated, IsEmployee]
 
     def get(self, request, *args, **kwargs):
-        date = request.query_params.get('date', None)
+        start_date = request.query_params.get('start_date', None)
+        end_date = request.query_params.get('end_date', None)
 
-        if date is None:
+        if start_date is None:
             return Response({'Message': 'Invalid query parameters'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        if end_date is None:
+            end_date = start_date
 
         user = get_user(request)
 
         try:
-            meetings_on_date = Details.objects.filter(meeting_date=date)
+            meetings_on_date = Details.objects.filter(meeting_date__gte=start_date, meeting_date__lte=end_date)
         except ValidationError:
             return Response({'Message': 'Invalid date format'}, status=status.HTTP_400_BAD_REQUEST)
         meetings = []
 
         for meeting_on_date in meetings_on_date:
-            participant = Status.objects.filter(
-                meeting_host=meeting_on_date.meeting).filter(participant=user)
-
             if not meeting_on_date.meeting.host == user:
-                if not participant.exists():
+                if not is_participant(meeting_on_date.meeting.id, user):
                     continue
 
             meeting_on_day = {
                 'title': meeting_on_date.meeting.title,
                 'status': meeting_on_date.meeting.meeting_status,
-                'start_time': meeting_on_date.start_time,
-                'end_time': meeting_on_date.end_time,
+                'start_time': meeting_on_date.start_time.strftime('%I:%M %p'),
+                'end_time': meeting_on_date.end_time.strftime('%I:%M %p'),
                 'host': meeting_on_date.meeting.host == user,
-                'room': meeting_on_date.room.room_number
+                'room': meeting_on_date.room.room_number,
+                'meeting_date': meeting_on_date.meeting_date
             }
 
             meetings.append(meeting_on_day)
@@ -70,11 +77,22 @@ class HostMeetingView(generics.CreateAPIView):
 
     def create(self, request, *args, **kwargs):
         user = get_user(request)
-        room = request.data.pop('room', None)
+        user_profile = UserProfile.objects.get(user=user)
+        if user_profile.building is None:
+            return Response({'Message': 'Please add building to your workplace before hosting a meeting'}, status=status.HTTP_412_PRECONDITION_FAILED)
 
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        self.perform_create(serializer)
+        try:
+            room = request.data['room']
+        except KeyError:
+
+            return Response({'Message': 'Room parameter not sent'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            serializer = self.get_serializer(data=request.data)
+            serializer.is_valid(raise_exception=True)
+            self.perform_create(serializer)
+        except ValidationError as error:
+            return Response(error, status=status.HTTP_400_BAD_REQUEST)
 
         meeting_id = serializer.data['uid']
 
@@ -101,42 +119,41 @@ class HostMeetingView(generics.CreateAPIView):
             elif room == 'suggestion':
                 room_id = -1
             else:
-                return Response({'Message': 'Invalid query parameters'}, status=status.HTTP_400_BAD_REQUEST)
+
+                return Response({'Message': 'Invalid room parameter'}, status=status.HTTP_400_BAD_REQUEST)
         except TypeError:
-            return Response({'Message': 'Invalid query parameters'}, status=status.HTTP_400_BAD_REQUEST)
+
+            return Response({'Message': 'Room parameter not sent'}, status=status.HTTP_400_BAD_REQUEST)
 
         suggestions = root_suggestion(meeting_id, room_id)
 
+        meeting = Host.objects.get(uid=meeting_id)
+        meeting_participants = Status.objects.filter(meeting_host=meeting)
+
+        participants = []
+
+        for meeting_participant in meeting_participants:
+            participant_profile = UserProfile.objects.get(
+                user=meeting_participant.participant)
+            profile_pic = ''
+
+            if participant_profile.profile_pics != '':
+                profile_pic = settings.MEDIA_URL + \
+                    str(participant_profile.profile_pics)
+
+            participant = {
+                'name': participant_profile.get_full_name,
+                'profile_pics': profile_pic,
+            }
+            participants.append(participant)
+
         if suggestions:
-            return Response({'Message': 'Success', 'meeting': meeting_id, 'suggestions': suggestions}, status=status.HTTP_200_OK)
+            return Response({'Message': 'Success', 'meeting': meeting_id, 'suggestions': suggestions, 'participants_via_email': meeting.participant_email, 'participants': participants}, status=status.HTTP_200_OK)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
     def get_serializer_context(self):
         user = get_user(self.request)
         return {'host': user}
-
-
-
-
-'''
-Repeated code. same as sending put request in HostPostponeFinalizeMeetingAPIView
-Not removed because android is currently using this. Remove when/if android cooperates.
-'''
-class MeetingFinalizeAPIView(generics.CreateAPIView):
-    permission_classes = [IsAuthenticated, IsEmployee]
-    queryset = Details.objects.all()
-    serializer_class = DetailsSerializer
-
-    def create(self, request, *args, **kwargs):
-        print(request.data)
-        try:
-            serializer = self.get_serializer(data=request.data)
-            serializer.is_valid(raise_exception=True)
-            self.perform_create(serializer)
-            return Response({'Message': 'Success'}, status=200)
-        except Exception:
-            print(serializer.errors)
-            return Response({'Message': 'Host meeting failed. Please try again.', 'Errors': serializer.errors}, status=400)
 
 
 class UpcomingMeetingsAPIView(APIView):
@@ -178,61 +195,70 @@ class UpcomingMeetingsAPIView(APIView):
     def post(self, request, *args, **kwargs):
         user = get_user(request)
 
-        if 'id' in request.data:
-            notif_id = request.data['id']
-            notification = Notification.objects.get(id=notif_id)
-            meeting_detail = Details.objects.get(id=notification.meeting_id)
-            meeting = Host.objects.get(uid=meeting_detail.meeting.uid)
+        try:
+            if 'meeting_id' in request.data:
+                meeting_uid = request.data['meeting_id']
+                meeting_detail = Details.objects.get(meeting_id=meeting_uid)
+                meeting = Host.objects.get(uid=meeting_uid)
 
-        elif 'meeting_id' in request.data:
-            meeting_uid = request.data['meeting_id']
-            meeting_detail = Details.objects.get(meeting_id=meeting_uid)
-            meeting = Host.objects.get(uid=meeting_uid)
+            profile = UserProfile.objects.get(user=meeting.host)
 
-        profile = UserProfile.objects.get(user=meeting.host)
+            response = {
+                'title': meeting.title,
+                'agenda': meeting.agenda,
+                'hosted_by': profile.get_full_name,
+                'host': user == meeting.host,
+                'status': meeting.meeting_status,
+                'participants_email': meeting.participant_email,
+                'date': meeting_detail.meeting_date,
+                'start_time': meeting_detail.start_time.strftime('%I:%M %p'),
+                'end_time': meeting_detail.end_time.strftime('%I:%M %p'),
+                'room': meeting_detail.room.room_number,
+                'meetingId': meeting.uid,
+                'type': meeting.type,
+                'building': meeting_detail.room.property.name
+            }
 
-        response = {
-            'title': meeting.title,
-            'agenda': meeting.agenda,
-            'hosted_by': profile.get_full_name,
-            'host': user == meeting.host,
-            'status': meeting.meeting_status,
-            'participants_email': meeting.participant_email,
-            'date': meeting_detail.meeting_date,
-            'start_time': meeting_detail.start_time.strftime('%I:%M%p'),
-            'end_time': meeting_detail.end_time.strftime('%I:%M%p'),
-            'room': meeting_detail.room.room_number,
-            'meetingId': meeting.uid,
-            'type': meeting.type,
-        }
+            participants = []
 
-        participants = []
+            meeting_status = Status.objects.filter(meeting_host=meeting)
 
-        meeting_status = Status.objects.filter(meeting_host=meeting)
+            for meet in meeting_status:
+                print(meet.participant)
+                try:
+                    participant_profile = UserProfile.objects.get(
+                        user=meet.participant)
+                except ObjectDoesNotExist:
+                    continue
 
-        for meet in meeting_status:
-            print(meet.participant)
-            try:
-                participant_profile = UserProfile.objects.get(
-                    user=meet.participant)
-            except ObjectDoesNotExist:
-                continue
+                profile_pic = ''
+                if participant_profile.profile_pics != '':
+                    profile_pic = settings.MEDIA_URL + \
+                        str(participant_profile.profile_pics)
 
-            if (user == meeting.host):
-                participant = {
-                    'name': participant_profile.get_full_name,
-                    'status': meet.participant_status,
-                    'message': meet.participant_message
-                }
-            else:
-                participant = {
-                    'name': participant_profile.get_full_name,
-                    'status': meet.participant_status,
-                }
+                if (user == meeting.host):
+                    participant = {
+                        'name': participant_profile.get_full_name,
+                        'status': meet.participant_status,
+                        'message': meet.participant_message,
+                        'profile_pics': profile_pic
+                    }
+                else:
+                    participant = {
+                        'name': participant_profile.get_full_name,
+                        'status': meet.participant_status,
+                        'profile_pics': profile_pic
+                    }
 
-            participants.append(participant)
+                participants.append(participant)
 
-        response['participants'] = participants
+            response['participants'] = participants
+        except KeyError:
+            return Response({'Message': 'meeting_id not found'}, status=status.HTTP_400_BAD_REQUEST)
+        except ObjectDoesNotExist:
+            return Response({'Message': 'Meeting with the meeting_id not found'}, status=status.HTTP_400_BAD_REQUEST)
+        except ValidationError:
+            return Response({'Message': 'Invalid uid'}, status=status.HTTP_400_BAD_REQUEST)
 
         return Response(response, status=status.HTTP_200_OK)
 
@@ -240,165 +266,65 @@ class UpcomingMeetingsAPIView(APIView):
 '''
 Participant postpone meeting flow
 '''
-class AcceptMeetingAPIView(APIView):
+
+
+class ChangeMeetingStatusAPIView(APIView):
     permission_classes = [IsAuthenticated, IsEmployee]
 
     def post(self, request, *args, **kwargs):
         user = get_user(request)
 
         try:
-            meeting_uid = request.data['meeting_id']
-            meeting = Host.objects.get(uid=meeting_uid)
-            meeting_details = Details.objects.get(meeting=meeting)
-            profile = UserProfile.objects.get(user=user)
+            meeting_id = request.data['meeting_id']
+            change_status_to = request.data['participant_status']
 
-            user_participant = Status.objects.filter(meeting_host=meeting_uid, participant=user)
-            participants = Status.objects.filter(meeting_host=meeting_uid)
+            try:
+                participant_message = request.data['participant_message']
+            except KeyError:
+                participant_message = None
 
-            if not user_participant.exists():
+            meeting = Host.objects.get(uid=meeting_id)
+
+            if not is_participant(meeting_id, user):
                 return Response({'Message': 'Access Forbidden'}, status=status.HTTP_403_FORBIDDEN)
+
+            all_participant_status = ['AC', 'DE', 'PO']
+            if change_status_to not in all_participant_status:
+                return Response({'Message': 'Invalid participant_status'}, status=status.HTTP_400_BAD_REQUEST)
             
-            if meeting.meeting_status in ['CO', 'CA', 'PO', 'DR']:
-                return Response({'Message': 'Meeting cannot be accepted'}, status=status.HTTP_412_PRECONDITION_FAILED)
+            invalid_meeting_param = ['CA', 'CO', 'DR', 'ON', 'FI']
 
-            participant_status = True
+            if change_status_to != 'PO':
+                invalid_meeting_param = ['CA', 'CO', 'DR', 'ON']
 
-            for participant in participants:
-                if participant.participant == user:
-                    participant.participant_status = 'AC'
-                    participant.save()
+            message, invalid_meeting = is_meeting_valid(meeting, invalid_meeting_param)
 
-                if participant.participant_status == 'PE' or participant.participant_status == 'PO':
-                    participant_status = False
-
-            if participant_status:
-                meeting = Host.objects.get(uid=meeting_uid)
-                meeting.meeting_status = 'FI'
-                meeting.save()
-
-            title = 'Invitation Accepted'
-
-            message = profile.get_full_name + \
-                ' has accepted your invitation to meeting ' + meeting.title + '.'
-            notification_type = 'meeting'
-            notification = Notification(
-                title=title, message=message, notification_type=notification_type, meeting=meeting_details, user=meeting.host)
-            notification.save()
-        except ObjectDoesNotExist:
-            return Response({'Message': 'Invalid Meeting ID'}, status=status.HTTP_400_BAD_REQUEST)
-        except KeyError:
-            return Response({'Message': 'Meeting ID required in body'}, status=status.HTTP_400_BAD_REQUEST)
-
-        return Response({'Message': 'Success'}, status=status.HTTP_200_OK)
-
-
-'''
-Participant postpone meeting flow
-'''
-class PostponeMeetingAPIView(APIView):
-    permission_classes = [IsAuthenticated, IsEmployee]
-
-    def post(self, request, *args, **kwargs):
-        try:
-            user = get_user(request)
-            meeting_uid = request.data['meeting_id']
-
-            meeting = Host.objects.get(uid=meeting_uid)
-            meeting_details = Details.objects.get(meeting=meeting)
-            profile = UserProfile.objects.get(user=user)
-
-            participants = Status.objects.filter(meeting_host=meeting_uid, participant=user)
-
-            if not participants.exists():
-                return Response({'Message': 'Access Forbidden'}, status=status.HTTP_403_FORBIDDEN)
-            
-            if meeting.type == 'CF':
+            if meeting.type == 'CF' and change_status_to == 'PO':
                 return Response({'Message': 'Conferences cannot be postponed'}, status=status.HTTP_412_PRECONDITION_FAILED)
 
-            if meeting.meeting_status in ['CO', 'CA', 'PO', 'DR', 'FI']:
-                return Response({'Message': 'This meeting cannot be postponed'}, status=status.HTTP_412_PRECONDITION_FAILED)
-
-            for participant in participants:
-                if participant.participant == user:
-                    participant.participant_status = 'PO'
-                    participant.participant_message = request.data['participant_message']
-                    participant.save()
-
-            title = 'Postponement of meeting requested'
-
-            message = profile.get_full_name + \
-                ' has requested to postpone meeting ' + meeting.title + '.'
-            notification_type = 'meeting'
-            notification = Notification(
-                title=title, message=message, notification_type=notification_type, meeting=meeting_details, user=meeting.host)
-            notification.save()
-
-            return Response({'Message': 'Success'}, status=status.HTTP_200_OK)
-        except KeyError:
-            return Response({'Message': 'Meeting ID required in body'}, status=status.HTTP_400_BAD_REQUEST)
-        except ObjectDoesNotExist:
-            return Response({'Message': 'Meeting ID is invalid'}, status=status.HTTP_400_BAD_REQUEST)
-
-
-class DeclineMeetingAPIView(APIView):
-    permission_classes = [IsAuthenticated, IsEmployee]
-
-    def post(self, request, *args, **kwargs):
-        try:
-            user = get_user(request)
-            meeting_uid = request.data['meeting_id']
-
-            meeting = Host.objects.get(uid=meeting_uid)
-            meeting_details = Details.objects.get(meeting=meeting)
-            profile = UserProfile.objects.get(user=user)
-
-
-            user_participant = Status.objects.filter(meeting_host=meeting_uid, participant=user)
-            participants = Status.objects.filter(
-                meeting_host=meeting_uid)
-
-            if not user_participant.exists():
-                return Response({'Message': 'Access Forbidden'}, status=status.HTTP_403_FORBIDDEN)
+            if invalid_meeting:
+                return Response({'Message': message}, status=status.HTTP_412_PRECONDITION_FAILED)
             
-            if meeting.meeting_status in ['CO', 'CA', 'PO', 'DR']:
-                return Response({'Message': 'This meeting cannot be declined'}, status=status.HTTP_412_PRECONDITION_FAILED)
+            participant = Status.objects.get(meeting_host=meeting_id, participant=user)
 
-            participant_status = True
+            if participant.participant_status == change_status_to:
+                return Response(status=status.HTTP_204_NO_CONTENT)
 
-            for participant in participants:
-                if participant.participant == user:
-                    participant.participant_status = 'DE'
-                    participant.participant_message = request.data['participant_message']
-                    participant.save()
+            participant.participant_status = change_status_to
 
-                if participant.participant_status == 'PE' or participant.participant_status == 'PO':
-                    participant_status = False
+            if participant_message is not None:
+                participant.participant_message = participant_message
 
-            if participant_status:
-                meeting = Host.objects.get(uid=meeting_uid)
-                meeting.meeting_status = 'FI'
-                meeting.save()
-
-            title = 'Invitation Declined'
-
-            message = profile.get_full_name + \
-                ' has declined your invitation to meeting ' + meeting.title + '.'
-            notification_type = 'meeting'
-            notification = Notification(
-                title=title, message=message, notification_type=notification_type, meeting=meeting_details, user=meeting.host)
-            notification.save()
-            
-            return Response({'Message': 'Success'}, status=status.HTTP_200_OK)
-        except KeyError:
-            return Response({'Message': 'Meeting ID required in body'}, status=status.HTTP_400_BAD_REQUEST)
+            participant.save()
+        except ValidationError as error:
+            print(error)
+            return Response({'Message': 'meeting_id is not a valid UID'}, status=status.HTTP_400_BAD_REQUEST)
         except ObjectDoesNotExist:
-            return Response({'Message': 'Meeting ID is invalid'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'Message': 'Meeting not found'}, status=status.HTTP_400_BAD_REQUEST)
+        except KeyError:
+            return Response({'Message': 'meeting_id and change_status_to cannot be blank'}, status=status.HTTP_400_BAD_REQUEST)
 
-
-
-'''
-When a meeting has been finalized. Send notification to the users.
-'''
+        return Response({'Message': 'Success'}, status=status.HTTP_200_OK)
 
 
 class HostFinalizeMeetingAPIView(APIView):
@@ -457,16 +383,14 @@ class HostPostponeMeetingAPIView(generics.RetrieveUpdateAPIView):
                 'name': user_profile.get_full_name,
             }
             participants_list.append(participant_list)
-        
+
         serializer_dict['participant'] = participants_list
         return Response({'Meeting': serializer_dict}, status=status.HTTP_200_OK)
-
 
     def update(self, request, *args, **kwargs):
         user = get_user(request)
 
         try:
-            print('Update Meeting:{0}'.format(request.data))
             meeting_id = self.kwargs['uid']
             partial = self.kwargs.pop('partial', False)
             room = request.data.pop('room', None)
@@ -477,7 +401,7 @@ class HostPostponeMeetingAPIView(generics.RetrieveUpdateAPIView):
 
             if meeting.meeting_status in ['CO', 'FI', 'CA']:
                 return Response({'Message': 'This meeting cannot be postponed.'}, status=status.HTTP_412_PRECONDITION_FAILED)
-            
+
             if room == 'current':
                 profile = UserProfile.objects.get(user=user)
                 if profile.room is None:
@@ -519,7 +443,6 @@ class HostPostponeMeetingAPIView(generics.RetrieveUpdateAPIView):
         return MeetingHostSerializer
 
 
-
 class HostPostponeFinalizeMeetingAPIView(generics.UpdateAPIView):
     permission_classes = (IsAuthenticated, IsEmployee)
     serializer_class = DetailsSerializer
@@ -527,10 +450,12 @@ class HostPostponeFinalizeMeetingAPIView(generics.UpdateAPIView):
     lookup_field = 'meeting'
 
     def update(self, request, *args, **kwargs):
-        print('Update{0}'.format(request.data))
         user = get_user(request)
         meeting_id = self.kwargs.pop('meeting', None)
         partial = self.kwargs.pop('partial', False)
+
+        if 'timezone' not in request.data:
+            return Response({'Message': 'Timezone also required'}, status=status.HTTP_400_BAD_REQUEST)
 
         if meeting_id is None:
             return Response({'Message': 'Meeting ID required in the URL'}, status=status.HTTP_400_BAD_REQUEST)
@@ -544,47 +469,66 @@ class HostPostponeFinalizeMeetingAPIView(generics.UpdateAPIView):
             if meeting.meeting_status in ['CO', 'FI', 'CA']:
                 return Response({'Message': 'This meeting cannot be postponed.'}, status=status.HTTP_412_PRECONDITION_FAILED)
 
-            # if meeting.type == 'CF':
-            #     return Response({'Message': 'Conferences cannot be postponed'}, status=status.HTTP_400_BAD_REQUEST)
+            try:
+                timezone = pytz.timezone(request.data['timezone'])
+                now = datetime.datetime.now(timezone)
+            except UnknownTimeZoneError:
+                return Response({'Message': 'Unknown timezone'}, status=status.HTTP_400_BAD_REQUEST)
+            except AttributeError:
+                return Response({'Message': 'Unknown timezone'}, status=status.HTTP_400_BAD_REQUEST)
+
+            start_time = request.data['meeting_date'] + \
+                request.data['start_time']
+            end_time = request.data['meeting_date'] + request.data['end_time']
+            try:
+                meeting_start_time = datetime.datetime.strptime(
+                    start_time, '%Y-%m-%d%I:%M %p')
+                meeting_start_time = now.replace(meeting_start_time.year, meeting_start_time.month, meeting_start_time.day,
+                                                 meeting_start_time.hour, meeting_start_time.minute, meeting_start_time.second, meeting_start_time.microsecond)
+
+                meeting_end_time = datetime.datetime.strptime(
+                    end_time, '%Y-%m-%d%I:%M %p')
+                meeting_end_time = now.replace(meeting_end_time.year, meeting_end_time.month, meeting_end_time.day,
+                                               meeting_end_time.hour, meeting_end_time.minute, meeting_end_time.second, meeting_end_time.microsecond)
+
+            except ValueError:
+                return Response({'Message': 'Date required in yyyy-mm-dd format and time required in hh:mm PM format'}, status=status.HTTP_400_BAD_REQUEST)
+
+            meeting_start_time = meeting_start_time.astimezone(pytz.UTC)
+            meeting_end_time = meeting_end_time.astimezone(pytz.UTC)
+            try:
+                _mutable = request.data._mutable
+                request.data['meeting_date'] = meeting_start_time.date(
+                ).isoformat()
+                request.data['start_time'] = meeting_start_time.time(
+                ).isoformat()
+                request.data['end_time'] = meeting_end_time.time().isoformat()
+                request.data._mutable = _mutable
+
+            except AttributeError:
+                request.data['meeting_date'] = meeting_start_time.date(
+                ).isoformat()
+                request.data['start_time'] = meeting_start_time.time(
+                ).isoformat()
+                request.data['end_time'] = meeting_end_time.time().isoformat()
 
             first_instance = Details.objects.filter(meeting=meeting)
-
-            if first_instance.exists():
-                serializer = self.get_serializer(
-                    first_instance[0], data=request.data, partial=partial)
-                serializer.is_valid(raise_exception=True)
-                self.perform_update(serializer)
-            else:
-                serializer = self.get_serializer(data=request.data)
-                serializer.is_valid(raise_exception=True)
-                self.perform_update(serializer)
+            try:
+                if first_instance.exists():
+                    serializer = self.get_serializer(
+                        first_instance[0], data=request.data, partial=partial)
+                    serializer.is_valid(raise_exception=True)
+                    self.perform_update(serializer)
+                else:
+                    serializer = self.get_serializer(data=request.data)
+                    serializer.is_valid(raise_exception=True)
+                    self.perform_update(serializer)
+            except ValidationError:
+                return Response(ValidationError, status=status.HTTP_400_BAD_REQUEST)
 
             instance = Details.objects.get(meeting=meeting)
-
-            participants = Status.objects.filter(meeting_host=meeting)
-            title = 'Meeting has been posponed'
-            message = 'The meeting ' + meeting.title + ' has been postponed to ' + instance.meeting_date.isoformat()
-            notification_type = 'meeting'
-
-            if first_instance.exists():
-                for participant in participants:
-                    notification = Notification(user=participant.participant, meeting=instance,
-                                                title=title, message=message, notification_type=notification_type)
-                    notification.save()
-
             send_meeting_mail(meeting.participant_email, meeting, instance)
 
             return Response({'Message': 'Success'}, status=status.HTTP_200_OK)
         except ObjectDoesNotExist:
             return Response({'Message': 'Invalid Meeting ID'}, status=status.HTTP_400_BAD_REQUEST)
-
-
-'''
-{"agenda":"Annual progress from each and every department members.",
-"start_date":"2020-02-25",
-"title":"Annual Meetup",
-"duration":10800,
-"type":"PU",
-"end_date":"2020-02-28",
-"meeting_to_participant":[{"participant":"4"},{"participant":"6"}], "timezone":"Asia/Kathmandu", "room":"current"}
-'''

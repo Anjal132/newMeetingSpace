@@ -1,4 +1,8 @@
+import datetime
+
+import pytz
 from django.core.exceptions import ObjectDoesNotExist, ValidationError
+from pytz.exceptions import UnknownTimeZoneError
 from rest_framework import serializers
 
 from notifications.models import Notification
@@ -29,7 +33,8 @@ class DetailsSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
     def create(self, validated_data):
-        meeting_uid = validated_data['meeting']
+        print('Create')
+        meeting_uid = validated_data['meeting']        
         details = Details.objects.create(**validated_data)
 
         meeting = Host.objects.get(uid=meeting_uid.uid)
@@ -37,18 +42,6 @@ class DetailsSerializer(serializers.ModelSerializer):
 
         meeting.meeting_status = 'IN'
         meeting.save()
-
-        participants = Status.objects.filter(meeting_host=meeting)
-        user_profile = UserProfile.objects.get(user=meeting.host)
-        full_name = user_profile.get_full_name
-        title = 'Invitation to meeting'
-        message = 'You have been invited to Meeting: ' + \
-            meeting.title + ' by ' + full_name + '.'
-
-        for participant in participants:
-            notification = Notification(user=participant.participant, title=title,
-                                        notification_type='meeting', message=message, meeting=details)
-            notification.save()
 
         send_meeting_mail(participant_email, meeting, details)
 
@@ -61,12 +54,33 @@ class MeetingHostSerializer(serializers.ModelSerializer):
     class Meta:
         model = Host
         fields = ('uid', 'title', 'agenda', 'duration', 'start_date',
-                  'end_date', 'type', 'meeting_to_participant')
+                  'end_date', 'type', 'meeting_to_participant', 'timezone')
         read_only_fields = ('uid', )
 
     def create(self, validated_data):
         participant_data = validated_data.pop('meeting_to_participant')
-        validated_data['host'] = self.context['host']
+        meeting_host = self.context['host']
+        validated_data['host'] = meeting_host
+        tzone = validated_data['timezone']
+
+        start_date = validated_data['start_date']
+        end_date = validated_data['end_date']
+
+        try:
+            tzone = pytz.timezone(tzone)
+        except pytz.exceptions.UnknownTimeZoneError:
+            message = 'Invalid timezone'
+            raise ValidationError(message)
+
+        current_date = datetime.datetime.now(tz=tzone)
+
+        if end_date < current_date.date() or end_date < start_date:
+            message = 'Invalid end date'
+            raise ValidationError(message)
+            
+        if start_date < current_date.date():
+            validated_data['start_date'] = current_date.date()
+
         host = Host.objects.create(**validated_data)
 
         send_email_to_other_participants = []
@@ -79,6 +93,14 @@ class MeetingHostSerializer(serializers.ModelSerializer):
                 participant_meeting = Status.objects.filter(meeting_host=host, participant=userid)
 
                 if not participant_meeting.exists():
+                    if host.host.id == userid.id:
+                        message = 'Cannot invite yourself to the meeting'
+                        raise ValidationError(message)
+                    
+                    if not userid.is_active or not userid.is_verified:
+                        message = 'Cannot invite inactive/unverfied users'
+                        raise ValidationError(message)
+
                     if userid.temp_name != host.host.temp_name:
                         message = 'User does not exist'
                         raise ValidationError(message)

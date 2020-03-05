@@ -16,6 +16,7 @@ class GoogleTokenStoreAPIView(APIView):
     serializer_class = GoogleCalendarSerializer
 
     def post(self, request, *args, **kwargs):
+        print(request.data)
         auth_code = request.data['code']
         email = request.data['email']
 

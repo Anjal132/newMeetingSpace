@@ -77,22 +77,17 @@ class GetSuggestionsAPIView(ListAPIView):
     def get_queryset(self):
         search = self.request.query_params.get('search', None)
 
-        if search is None:
+        if search is None or search == '':
             return UserProfile.objects.none()
 
         user = get_user(self.request)
-        current_user_profile = UserProfile.objects.get(user=user)
 
-        users_in_same_property = list(UserProfile.objects.filter(
-            building=current_user_profile.building).values_list('user_id', flat=True))
-        users_in_same_property.remove(user.id)
+        users_in_same_company = list(UserProfile.objects.all().values_list('user_id', flat=True))
+        users_in_same_company.remove(user.id)
 
-        try:
-            active_users = list(User.objects.filter(
-                id__in=users_in_same_property, is_active=True, is_verified=True).values_list('id', flat=True))
-            return UserProfile.objects.filter(user_id__in=active_users)
-        except:
-            return UserProfile.objects.none()
+        active_users = list(User.objects.filter(
+            id__in=users_in_same_company).exclude(is_verified=False, is_active=False).values_list('id', flat=True))
+        return UserProfile.objects.filter(user_id__in=active_users)
 
 
 class GetProfileAPIView(APIView):
@@ -103,6 +98,7 @@ class GetProfileAPIView(APIView):
     '''
 
     def put(self, request):
+        print(request.data)
         user = get_user(request)
         try:
             request.data._mutable = True
@@ -124,12 +120,13 @@ class GetProfileAPIView(APIView):
 
             office_start_time = validated_data.pop('office_start_time', None)
             office_end_time = validated_data.pop('office_end_time', None)
+            timezone = validated_data.pop('timezone', None)
 
             if office_start_time is not None or office_end_time is not None:
-                if office_start_time is None or office_end_time is None:
-                    return Response({'Message': 'Office start time and office end time are both required'}, status=status.HTTP_400_BAD_REQUEST)
+                if office_start_time is None or office_end_time is None or timezone is None:
+                    return Response({'Message': 'Office start time, office end time and timezone are all required'}, status=status.HTTP_400_BAD_REQUEST)
                 
-                now = datetime.datetime.now(tz=pytz.timezone(instance.timezone))
+                now = datetime.datetime.now(tz=pytz.timezone(timezone))
                 
                 office_start_time = now.replace(hour=office_start_time.hour, minute=office_start_time.minute, second=0, microsecond=0)
                 office_end_time = now.replace(hour=office_end_time.hour, minute=office_end_time.minute, second=0, microsecond=0)
@@ -139,7 +136,7 @@ class GetProfileAPIView(APIView):
 
             if building is None and instance.building is None:
                 if 'room' in validated_data or 'floor' in validated_data:
-                    return Response({'Message': 'Cannot add room or floor without building'}, status=status.HTTP_400_BAD_REQUEST)
+                    return Response({'Message': 'Cannot add room without building'}, status=status.HTTP_400_BAD_REQUEST)
 
             if building is not None or instance.building is not None:
                 if building is None:

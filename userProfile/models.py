@@ -14,7 +14,7 @@ class UserProfile(models.Model):
     building = models.ForeignKey(
         Property, on_delete=models.CASCADE, related_name='building', null=True)
     department = models.ForeignKey(
-        Department, on_delete=models.CASCADE, related_name='department', null=True)
+        Department, on_delete=models.SET_NULL, related_name='department', null=True)
     room = models.ForeignKey(
         Room, on_delete=models.CASCADE, related_name='room', null=True)
     first_name = models.CharField(max_length=100, blank=True)

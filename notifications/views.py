@@ -31,8 +31,6 @@ class AllNotificationsAPIView(ListAPIView):
 
         return Notification.objects.filter(user=user).order_by('-created_at')
 
-
-
 class ChangeNotificationReadAPIView(UpdateAPIView):
     permission_classes = [IsAuthenticated, IsEmployee]
     serializer_class = NotificationReadSerializer

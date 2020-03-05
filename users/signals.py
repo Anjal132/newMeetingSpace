@@ -5,6 +5,9 @@ from django.db import connection
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 
+from meeting.models import Host, Status
+from notifications.notification_template import (
+    create_notification_host, create_notification_participant)
 from organization.models import Organization
 from staffProfile.models import StaffProfile
 from userProfile.models import UserProfile
@@ -38,6 +41,34 @@ def active_inactive_users(sender, instance, created, *args, **kwargs):
 
     if not created and instance:
         schema_name = instance.short_name + 'schema'
-        # print(instance.is_active)
-        User.objects.filter(temp_name=schema_name).update(is_verified=instance.is_active)
         
+        if instance.is_active:
+            users = User.objects.filter(temp_name=schema_name)
+            for user in users:
+                user.is_active = user.temp_active_status
+                user.save()
+        else:
+            User.objects.filter(temp_name=schema_name).update(is_active=instance.is_active)
+            
+
+
+
+@receiver(post_save, sender=Status)
+def change_meeting_status(sender, instance, created, *args, **kwargs):
+    if not created and instance:
+        meeting = Host.objects.get(uid=instance.meeting_host.uid)
+        participants_status = Status.objects.filter(meeting_host=meeting).exclude(
+                participant=instance.participant).values_list('participant_status', flat=True)
+
+        if 'PE' or 'PO' not in participants_status:
+            meeting.meeting_status = 'FI'
+            meeting.save()
+        
+        create_notification_participant(instance.participant_status, instance.participant, meeting)
+
+
+@receiver(post_save, sender=Host)
+def after_meeting_status_change(sender, instance, created, *args, **kwargs):
+    if not created and instance:
+        if instance.meeting_status != 'DR':
+            create_notification_host(instance)

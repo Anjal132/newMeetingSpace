@@ -1,5 +1,7 @@
 import datetime
 
+import pytz
+from django.conf import settings
 from rest_framework import serializers
 from rest_framework.exceptions import ValidationError
 
@@ -18,7 +20,13 @@ class PropertySerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         shared_company_floors = validated_data.pop('shared_company_floors', None)
-        company_floors = shared_company_floors.split(',')
+        
+        if isinstance(shared_company_floors, str):
+            company_floors = shared_company_floors.split(',')
+        else:
+            message = 'Use format "[1,2,3,4]" for shared_company_floors'
+            raise ValidationError(message)
+
         floors = []
 
         for index, company_floor in enumerate(company_floors):
@@ -30,9 +38,12 @@ class PropertySerializer(serializers.ModelSerializer):
                     company_floor = int(company_floor[0])
 
                 floor = int(company_floor)
-                floors.append(floor)
+
+                if floor not in floors:
+                    floors.append(floor)
             except ValueError:
-                continue
+                message = 'Use format "[1,2,3]" for shared_company_floors'
+                raise ValidationError(message)
         
         if not floors:
             message = 'There should be a minimum of one floor in a building'
@@ -64,14 +75,20 @@ class DepartmentDetailSerializer(serializers.ModelSerializer):
         if building == -1 or building is None:
             return members
 
-        user_profiles = UserProfile.objects.filter(department=obj, building=building)
+        user_profiles = UserProfile.objects.filter(department=obj)
         for profile in user_profiles:
             if profile.user == user:
                 continue
+            # profile_pic = profile.profile_pics
+
+            profile_pic = ''
+            if profile.profile_pics != '':
+                profile_pic = settings.MEDIA_URL+str(profile.profile_pics)
 
             member = {
                 'user_id': profile.user.id,
-                'user_name': profile.get_full_name
+                'user_name': profile.get_full_name,
+                'profile_pics': profile_pic
             }
             members.append(member)
 
@@ -109,16 +126,18 @@ class RoomSerializer(serializers.ModelSerializer):
         # Property
 
 
+
 class BookedRoomSerializer(serializers.ModelSerializer):
     booked = serializers.SerializerMethodField()
 
     class Meta:
         model = Room
         fields = ['id', 'room_number', 'floor', 'room_amenity', 'room_type', 'room_capacity', 'is_active', 'booked']
+        read_only_fields = ('booked', )
 
     def get_booked(self, obj):
         meetings = Details.objects.filter(meeting_date=datetime.date.today(), room=obj)
-        rightnow = datetime.datetime.now()
+        rightnow = datetime.datetime.now(pytz.UTC)
 
         for meeting in meetings:
             if meeting.start_time <= rightnow.time() <= meeting.end_time:

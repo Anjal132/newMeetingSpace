@@ -4,20 +4,26 @@ from django.conf import settings
 from django.contrib.auth import password_validation
 from django.db import connection
 from rest_framework import serializers
+from rest_framework.exceptions import ValidationError
 from rest_framework.validators import UniqueValidator
 
+from ccalendar.models import Google, Outlook
 from organization.apiSerializers import CompanyDetailSerializer
 from staffProfile.models import StaffProfile
 from userProfile.models import UserProfile
 from users.models import User
-from ccalendar.models import Google, Outlook
 
 
 class ActiveInactiveUserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = ('is_active',)
-
+    
+    def update(self, instance, validated_data):
+        instance.is_active = validated_data['is_active']
+        instance.temp_active_status = validated_data['is_active']
+        instance.save()
+        return instance
 
 class UserListSerializer(serializers.ModelSerializer):
     class Meta:
@@ -166,6 +172,11 @@ class CreateEmployeeSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         building = validated_data.pop('building')
+        
+        if building['building'] is not None:
+            if building['building'].is_available == 'SD':
+                message = 'Cannot add user to shut down building'
+                raise ValidationError(message)
 
         validated_data['organization'] = self.context['organization']
         user = User.objects.create_user(**validated_data)

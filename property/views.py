@@ -1,5 +1,6 @@
 import datetime
 
+import pytz
 from django.core.exceptions import ObjectDoesNotExist, ValidationError
 from rest_framework import generics, status
 from rest_framework.permissions import IsAuthenticated
@@ -7,14 +8,15 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from meeting.models import Details
+from pagination.pagination import SmallResultsSetPagination
 from permission.permissions import IsCompanyAdmin, IsEmployee
 from userProfile.models import UserProfile
 from utils.utils import get_user
-from pagination.pagination import SmallResultsSetPagination
 
 from .models import Department, Property, Room
-from .serializers import (DepartmentSerializer, PropertySerializer,
-                          RoomSerializer, BookedRoomSerializer, DepartmentDetailSerializer)
+from .serializers import (BookedRoomSerializer, DepartmentDetailSerializer,
+                          DepartmentSerializer, PropertySerializer,
+                          RoomSerializer)
 
 
 '''
@@ -53,8 +55,14 @@ class AvailableRoomsAPIView(generics.ListAPIView):
 
         if floor is None:
             floor = building.shared_company_floors
-        elif not floor in building.shared_company_floors:
-            return Room.objects.none()
+        else:
+            try:
+                floor = int(floor)
+                if floor not in building.shared_company_floors:
+                   return Room.objects.none()
+                floor = [floor] 
+            except ValueError:
+                return Room.objects.none()
 
         room_type = []
         room_type_list = ['CR', 'MR', 'PO', 'DH']
@@ -86,8 +94,8 @@ class AvailableRoomsAPIView(generics.ListAPIView):
                     exclude_rooms.append(meeting.room.id)
 
         if booked == 'booked':
-            return Room.objects.filter(property=user_profile.building, room_type__in=room_type, floor__in=floor, id__in=booked_rooms, is_active=True).order_by('floor')
-        return Room.objects.filter(property=user_profile.building, room_type__in=room_type, floor__in=floor, is_active=True).exclude(id__in=exclude_rooms).order_by('floor')
+            return Room.objects.filter(property=user_profile.building, room_type__in=room_type, floor__in=floor, id__in=booked_rooms, is_active=True).order_by('floor', 'room_number')
+        return Room.objects.filter(property=user_profile.building, room_type__in=room_type, floor__in=floor, is_active=True).exclude(id__in=exclude_rooms).order_by('floor', 'room_number')
 
 
 class AllRoomsAPIView(generics.ListAPIView):
@@ -135,20 +143,77 @@ class AllRoomsAPIView(generics.ListAPIView):
             if not active_rooms in active_rooms_list or not room_type in room_type_list:
                 return Room.objects.none()
 
-            return Room.objects.filter(property=property_id, room_type=room_type, is_active=is_active, floor__in=floor).order_by('floor')
+            return Room.objects.filter(property=property_id, room_type=room_type, is_active=is_active, floor__in=floor).order_by('floor', 'room_number')
 
         if room_type is not None:
             if room_type in room_type_list:
-                return Room.objects.filter(property=property_id, room_type=room_type, floor__in=floor).order_by('floor')
+                return Room.objects.filter(property=property_id, room_type=room_type, floor__in=floor).order_by('floor', 'room_number')
             return Room.objects.none()
 
         if active_rooms is not None:
             if active_rooms in active_rooms_list:
-                return Room.objects.filter(property=property_id, is_active=is_active, floor__in=floor).order_by('floor')
+                return Room.objects.filter(property=property_id, is_active=is_active, floor__in=floor).order_by('floor', 'room_number')
             return Room.objects.none()
 
-        return Room.objects.filter(property=property_id, floor__in=floor).order_by('floor')
+        return Room.objects.filter(property=property_id, floor__in=floor).order_by('floor', 'room_number')
 
+class AllRoomsAPIViewWithoutPagination(generics.ListAPIView):
+    permission_classes = [IsAuthenticated, IsEmployee]
+    serializer_class = BookedRoomSerializer
+
+    def get_queryset(self):
+        property_id = self.request.query_params.get('property', None)
+        active_rooms = self.request.query_params.get('active', None)
+        room_type = self.request.query_params.get('roomType', None)
+        floor = self.request.query_params.get('floor', None)
+        
+        if property_id is None:
+            return Room.objects.none()
+
+        try:
+            buildings = Property.objects.get(id=property_id)
+        except ObjectDoesNotExist:
+            return Room.objects.none()
+
+        if floor is None:
+            floor = buildings.shared_company_floors
+        else:
+            try:
+                floor = int(floor)
+
+                if floor not in buildings.shared_company_floors:
+                    return Room.objects.none()
+
+                floor = [floor]
+            except ValueError:
+                return Response({'Message': 'Floor must be integer'}, status=status.HTTP_400_BAD_REQUEST)
+
+        room_type_list = ['CR', 'MR', 'PO', 'DH', 'BR']
+        active_rooms_list = ['active', 'inactive']
+
+        if active_rooms is not None:
+            is_active = False
+
+            if active_rooms == 'active':
+                is_active = True
+
+        if active_rooms is not None and room_type is not None:
+            if not active_rooms in active_rooms_list or not room_type in room_type_list:
+                return Room.objects.none()
+
+            return Room.objects.filter(property=property_id, room_type=room_type, is_active=is_active, floor__in=floor).order_by('floor', 'room_number')
+
+        if room_type is not None:
+            if room_type in room_type_list:
+                return Room.objects.filter(property=property_id, room_type=room_type, floor__in=floor).order_by('floor', 'room_number')
+            return Room.objects.none()
+
+        if active_rooms is not None:
+            if active_rooms in active_rooms_list:
+                return Room.objects.filter(property=property_id, is_active=is_active, floor__in=floor).order_by('floor', 'room_number')
+            return Room.objects.none()
+
+        return Room.objects.filter(property=property_id, floor__in=floor).order_by('floor', 'room_number')
 '''
 Add property to an organization. Get all the properties of an organization.
 '''
@@ -157,6 +222,7 @@ Add property to an organization. Get all the properties of an organization.
 class PropertyAddView(generics.ListCreateAPIView):
     permission_classes = (IsAuthenticated, IsCompanyAdmin,)
     serializer_class = PropertySerializer
+    pagination_class = SmallResultsSetPagination
 
     def get_queryset(self):
         if self.request.method == 'GET':
@@ -170,8 +236,8 @@ class PropertyAddView(generics.ListCreateAPIView):
                     return Property.objects.filter(is_available='SD')
                 return Property.objects.none()
 
-            return Property.objects.all()
-        return Property.objects.all()
+            return Property.objects.all().order_by('id')
+        return Property.objects.all().order_by('id')
 
 
 '''
@@ -183,6 +249,10 @@ class PropertyDetailAPIView(generics.RetrieveUpdateAPIView):
     permission_classes = (IsAuthenticated, IsCompanyAdmin)
     queryset = Property.objects.all()
     serializer_class = PropertySerializer
+
+    def get_queryset(self):
+        print(self.request.data)
+        return Property.objects.all()
 
 
 '''
@@ -285,6 +355,15 @@ class RoomDetailsAPIView(APIView):
         room_id = self.kwargs['pk']
         room = Room.objects.get(id=room_id)
         meeting_details = Details.objects.filter(room=room)
+
+        booked = False
+        current_time = datetime.datetime.now(tz=pytz.UTC)
+        meetings = Details.objects.filter(meeting_date=current_time.date(), room=room)
+
+        for meeting in meetings:
+            if meeting.start_time < current_time.time() <= meeting.end_time:
+                booked = True
+
         room_details = {
             'room_number': room.room_number,
             'floor': room.floor,
@@ -292,6 +371,7 @@ class RoomDetailsAPIView(APIView):
             'room_amenity': room.room_amenity,
             'room_capacity': room.room_capacity,
             'active': room.is_active,
+            'booked': booked
         }
 
         meeting = []
@@ -325,3 +405,14 @@ class RoomDetailsAPIView(APIView):
         room_details['meetings'] = meeting
 
         return Response({"Room": room_details}, status=status.HTTP_200_OK)
+
+
+class DepartmentUpdateDeleteView(generics.RetrieveUpdateDestroyAPIView):
+    permission_classes = [IsAuthenticated, IsCompanyAdmin]
+    serializer_class = DepartmentSerializer
+    queryset = Department.objects.all()
+
+class RoomUpdateAPIView(generics.UpdateAPIView):
+    permission_classes = [IsAuthenticated, IsCompanyAdmin]
+    serializer_class = BookedRoomSerializer
+    queryset = Room.objects.all()

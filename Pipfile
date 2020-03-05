@@ -40,6 +40,7 @@ google-api-python-client = "*"
 daphne = "*"
 channels = "*"
 django-filter = "*"
+timeago = "*"
 
 [requires]
 python_version = "3.8"

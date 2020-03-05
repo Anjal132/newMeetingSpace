@@ -1,0 +1,20 @@
+{% autoescape off %}
+
+Greetings,
+
+This is to inform you that {{ meeting_title }} has been called off by {{ meeting_host }} of {{ company_name }}.
+
+Title: {{ meeting_title }}
+Date: {{ meeting_date }}
+Time: {{ meeting_start_time }} - {{ meeting_end_time }}
+Room: {{ meeting_room }}/Floor: {{ floor }}
+Building: {{ property_location }}
+Organization: {{ company_name }}
+Location: {{ street }}, {{ city }}, {{ country }}
+
+Regards,
+{{ meeting_host }}
+{{ company_name }}
+
+
+{% endautoescape %}

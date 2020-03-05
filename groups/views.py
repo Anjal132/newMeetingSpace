@@ -1,16 +1,14 @@
 from django.core.exceptions import ObjectDoesNotExist, ValidationError
 from rest_framework import status
-from rest_framework.generics import ListCreateAPIView, RetrieveAPIView
+from rest_framework.generics import ListCreateAPIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from groups.models import Group
 from groups.serializers import GroupSerializer, GroupDetailSerializer
 from permission.permissions import IsEmployee
-from userProfile.models import UserProfile
 from users.models import User
 from utils.utils import get_user
-
 
 class GroupAPIView(ListCreateAPIView):
     permission_classes = [IsAuthenticated, IsEmployee]
@@ -30,7 +28,6 @@ class GroupAPIView(ListCreateAPIView):
         user = get_user(request)
         try:
             all_members = request.data['group_members']
-            user_profile = UserProfile.objects.get(user=user)
 
             for group_member in all_members:
                 member = User.objects.get(id=group_member)
@@ -40,11 +37,6 @@ class GroupAPIView(ListCreateAPIView):
 
                 if user.temp_name != member.temp_name:
                     return Response({'Message': 'All members must be of the same organization'}, status=status.HTTP_400_BAD_REQUEST)
-
-                member_profile = UserProfile.objects.get(user=member)
-
-                if member_profile.building != user_profile.building:
-                    return Response({'Message': 'Cannot add members from another property'}, status=status.HTTP_400_BAD_REQUEST)
             
             serializer = self.get_serializer(data=request.data)
             serializer.is_valid(raise_exception=True)

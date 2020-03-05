@@ -37,6 +37,7 @@ class User(AbstractBaseUser, PermissionsMixin):
     date_joined     = models.DateTimeField(auto_now_add=True)
     temp_name       = models.CharField(max_length=20, null=True)
     belongs_to      = models.ManyToManyField(to='organization.Organization', related_name='user_belong', blank=True)
+    temp_active_status = models.BooleanField(default=True)
 
     objects = UsersManager()
 

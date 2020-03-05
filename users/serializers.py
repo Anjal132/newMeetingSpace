@@ -1,4 +1,6 @@
+from django.conf import settings
 from rest_framework import serializers
+
 from userProfile.models import UserProfile
 
 
@@ -24,6 +26,7 @@ class ProfileSerializer(serializers.ModelSerializer):
 class ProfileSearchSerializer(serializers.ModelSerializer):
 
     name = serializers.SerializerMethodField()
+    profile_pics = serializers.SerializerMethodField()
 
     class Meta:
         model = UserProfile
@@ -31,4 +34,9 @@ class ProfileSearchSerializer(serializers.ModelSerializer):
 
     def get_name(self, obj):
         return obj.get_full_name
-     
+    
+    def get_profile_pics(self, obj):
+        profile_pic = ''
+        if obj.profile_pics != '':
+            profile_pic = settings.MEDIA_URL + str(obj.profile_pics)
+        return profile_pic

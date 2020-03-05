@@ -11,7 +11,7 @@ class Property(models.Model):
     )
     name = models.CharField(max_length=100, blank=False)
     street = models.CharField(max_length=100, blank=False)
-    zip_code = models.CharField(max_length=15, blank=False)
+    zip_code = models.IntegerField()
     city = models.CharField(max_length=25, blank=False)
     country = models.CharField(max_length=25, blank=False)
     latitude = models.CharField(max_length=50, blank=True, null=True)
@@ -26,7 +26,7 @@ class Property(models.Model):
 
 
 class Department(models.Model):
-    department_name = models.CharField(max_length=50)
+    department_name = models.CharField(max_length=50, unique=True)
 
     def __str__(self):
         return self.department_name

@@ -1,3 +1,4 @@
+from django.db.models import Count
 from rest_framework import generics, status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -8,9 +9,13 @@ from organization.apiSerializers import (CompanyProfileSerializer,
                                          CreateCompanySerializer)
 from organization.models import Organization
 from permission.permissions import IsCompanyAdmin, IsStaffUser
+from meeting.models import Host, Status, Details
+from property.models import Room, RoomBooking
 from users.models import User
 from utils.otherUtils import send_mail_admin
 from utils.utils import get_user
+import datetime
+import pytz
 
 # Create your views here.
 
@@ -63,10 +68,16 @@ class CompanyProfileAPIView(generics.RetrieveUpdateAPIView):
         return Organization.objects.get(schema_name=user.temp_name)
     
 
+
+'''
+Super admin dashboard
+'''
 class CompanyDashboardAPIVew(APIView):
     permission_classes = [IsAuthenticated, IsStaffUser]
     
     def get(self, request, *args, **kwargs):
+        limit = request.query_params.get('limit', None)
+
         total_companies = Organization.objects.all().exclude(schema_name='public').count()
         active_companies = Organization.objects.filter(is_active=True).exclude(schema_name='public').count()
         on_trial_companies = Organization.objects.filter(on_trial=True).exclude(schema_name='public').count()
@@ -78,15 +89,102 @@ class CompanyDashboardAPIVew(APIView):
         for company in all_companies:
             data = {
                 'company_name': company.name,
-                'active_users': User.objects.filter(is_active=True, temp_name=company.schema_name).count()
+                'active_users': User.objects.filter(is_active=True, temp_name=company.schema_name).count(),
+                'on_trial': company.on_trial
             }
             company_users_count.append(data)
+
+        company_users_count = sorted(company_users_count, key=lambda i: i['active_users'],reverse=True)
         
-        return Response({
-            'total_companies':total_companies,
-            'active_companies': active_companies, 
+        if limit is not None:
+            try:
+                limit = int(limit)
+                company_users_count = company_users_count[:limit]
+            except ValueError:
+                return Response({'Message': 'limit must be int'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        response = {
+            'total_companies': total_companies,
+            'active_companies': active_companies,
             'on_trial_companies': on_trial_companies,
             'total_users': total_users,
             'total_active_users': total_active_users,
             'company_users': company_users_count
+        }
+
+        return Response(response, status=status.HTTP_200_OK)
+
+
+'''
+Company Admin Dashboard
+'''
+
+class AdminDashboardAPIView(APIView):
+    permission_classes = [IsAuthenticated, IsCompanyAdmin]
+    def get(self, request, *args, **kwargs):
+        limit = request.query_params.get('limit', None)
+        year = request.query_params.get('year', None)
+
+        if year is not None:
+            try:
+                year = int(year)
+            except ValueError:
+                return Response({'Message': 'Year must be string'}, status=status.HTTP_400_BAD_REQUEST)
+        else:
+            year = datetime.datetime.now(pytz.UTC)
+            year = year.year
+
+
+
+        if limit is not None:
+            try:
+                limit = int(limit)
+            except ValueError:
+                return Response({'Message': 'limit must be integer or None'}, status=status.HTTP_400_BAD_REQUEST)
+        else:
+            limit = 50
+
+        room_bookings = RoomBooking.objects.values_list('room').annotate(room_count=Count('room')).order_by('-room_count')
+        
+        room_with_most_meetings = []
+
+        for room_booking in room_bookings:
+            room = Room.objects.get(id=room_booking[0])
+
+            most_used_room = {
+                'room_number': room.room_number,
+                'building': room.property.name,
+                'floor': room.floor,
+                'number_of_meetings_held': room_booking[1],
+                'capacity': room.room_capacity
+            }
+            
+            room_with_most_meetings.append(most_used_room)
+        
+        all_meetings = Host.objects.exclude(meeting_status__in=['DR', 'CA'])
+
+        members = 1
+        for meeting in all_meetings:
+            if meeting.participant_email is not None:
+                members += len(meeting.participant_email)
+            
+            participants = Status.objects.filter(meeting_host=meeting).count()
+            members += participants
+        
+
+        number_of_meetings_per_month = []
+        number_of_meetings_per_month.append({'year': year})
+        
+        for i in range(1, 13):
+            meetings_in_month = Details.objects.filter(meeting_date__year=year, meeting_date__month=i).count()
+
+            meeting_per_month = {
+                i:meetings_in_month
+            }
+
+            number_of_meetings_per_month.append(meeting_per_month)
+        return Response({
+            'rooms_with_most_meetings': room_with_most_meetings[:limit],
+            'average_number_of_users_per_meeting': members/len(all_meetings),
+            'meetings_per_month': number_of_meetings_per_month
         }, status=status.HTTP_200_OK)

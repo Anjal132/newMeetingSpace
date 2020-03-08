@@ -1,5 +1,6 @@
 import datetime
 import uuid
+import pytz
 
 from django.db import models
 from tenant_schemas.models import TenantMixin
@@ -20,7 +21,7 @@ class Organization(TenantMixin):
     is_active = models.BooleanField(default=True)
     on_trial = models.BooleanField(default=False)
     subscription_expiry = models.DateField(
-        default=datetime.date.today()+datetime.timedelta(weeks=1))
+        default=(datetime.datetime.now(pytz.UTC)+datetime.timedelta(weeks=1)).date())
     created_at = models.DateTimeField(auto_now_add=True)
     logo = models.ImageField(verbose_name='companyLogo', blank=True, null=True)
     street = models.CharField(max_length=100, blank=True, null=True)

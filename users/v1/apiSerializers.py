@@ -149,12 +149,6 @@ class ChangePasswordSerializer(serializers.Serializer):
         return value
 
 
-class UserProfileBuildingSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = UserProfile
-        fields = ['building', 'department']
-
-
 class CreateEmployeeSerializer(serializers.ModelSerializer):
     """Serializer to invite the employee by Company Admin."""
 
@@ -162,28 +156,16 @@ class CreateEmployeeSerializer(serializers.ModelSerializer):
     usr = User.objects.all()
     email = serializers.EmailField(required=True, validators=[
         UniqueValidator(usr, msg)])
-    building = UserProfileBuildingSerializer()
 
     class Meta:
         """ This is the Meta Class for Model Serializer"""
 
         model = User
-        fields = ['email', 'building']
+        fields = ['email', ]
 
     def create(self, validated_data):
-        building = validated_data.pop('building')
-        
-        if building['building'] is not None:
-            if building['building'].is_available == 'SD':
-                message = 'Cannot add user to shut down building'
-                raise ValidationError(message)
-
         validated_data['organization'] = self.context['organization']
         user = User.objects.create_user(**validated_data)
-
-        connection.set_schema(schema_name=user.temp_name)
-        UserProfile.objects.filter(user=user).update(
-            building=building['building'], department=building['department'])
 
         return user
 

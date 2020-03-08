@@ -8,7 +8,7 @@ from django.core.exceptions import ObjectDoesNotExist
 
 from ccalendar.models import Google
 from meeting.models import Details, Host, Status
-from property.models import Room
+from property.models import Room, RoomBooking
 from userProfile.models import UserProfile
 
 def is_participant(meeting_id, participant):
@@ -220,17 +220,16 @@ def get_single_events_dict(google_events, app_events):
 '''
 May need to +- 10 minutes to start_time and end_time to better filter the results
 '''
-
-
 def get_empty_room(date, start_time, end_time, meeting):
     user_profile = UserProfile.objects.get(user=meeting.host)
-    booked_rooms_on_date = Details.objects.filter(meeting_date=date)
+    # booked_rooms_on_date = Details.objects.filter(meeting_date=date)
+    booked_rooms_on_date = RoomBooking.objects.filter(booking_date=date)
     booked_room_list = []
     meeting_type = meeting.type
 
     for room in booked_rooms_on_date:
-        room_booked_start_time = room.start_time
-        room_booked_end_time = room.end_time
+        room_booked_start_time = room.booking_start_time.time()
+        room_booked_end_time = room.booking_end_time.time()
 
         if room_booked_start_time <= start_time <= room_booked_end_time or room_booked_start_time <= end_time <= room_booked_end_time:
             booked_room_list.append(room.room.id)
@@ -249,8 +248,7 @@ def get_empty_room(date, start_time, end_time, meeting):
         remaining_rooms = Room.objects.filter(property=user_profile.building, room_type__in=[
                                               'MR', 'PO', 'DH'], room_capacity__gte=members, is_active=True).exclude(id__in=booked_room_list)
         rooms = Room.objects.filter(property=user_profile.building, room_type__in=[
-                                              'MR', 'PO', 'DH'], room_capacity__gte=members, is_active=True).exclude(id__in=booked_room_list).values_list('id', 'room_capacity')
-                                              
+                                              'MR', 'PO', 'DH'], room_capacity__gte=members, is_active=True).exclude(id__in=booked_room_list).values_list('id', 'room_capacity')                     
     else:
         remaining_rooms = Room.objects.filter(
             property=user_profile.building, room_type='CR', room_capacity__gte=members, is_active=True).exclude(id__in=booked_room_list)
@@ -270,10 +268,11 @@ def get_empty_room(date, start_time, end_time, meeting):
 
 
 def get_room_status(date, start_time, end_time, room):
-    meetings = Details.objects.filter(meeting_date=date).filter(room=room)
+    # meetings = Details.objects.filter(meeting_date=date).filter(room=room)
+    meetings = RoomBooking.objects.filter(booking_date=date).filter(room=room)
 
     for meeting in meetings:
-        if meeting.start_time <= start_time < meeting.end_time or meeting.start_time < end_time <= meeting.end_time:
+        if meeting.booking_start_time.time() <= start_time < meeting.booking_end_time.time() or meeting.booking_start_time.time() < end_time <= meeting.booking_end_time.time():
             return None
 
     return Room.objects.get(id=room)
@@ -442,14 +441,16 @@ def meetings_details(meetings, filter_meeting, user, upcoming):
             meeting_host=meeting.meeting).filter(participant=user)
 
         if meeting.meeting.host == user or participant.exists():
-            if meeting.meeting_date == datetime.date.today():
+            now = datetime.datetime.now(pytz.UTC)
+            if meeting.meeting_date == now.date():
                 if upcoming:
-                    if meeting.start_time <= datetime.datetime.now().time():
+                    if meeting.start_time <= now.time():
                         continue
                 else:
-                    if meeting.start_time >= datetime.datetime.now().time():
+                    if meeting.start_time >= now.time():
                         continue
-
+            
+            user_profile = UserProfile.objects.get(user=meeting.meeting.host)
             meeting_item = {
                 'meeting_id': meeting.meeting.uid,
                 'title': meeting.meeting.title,
@@ -458,6 +459,7 @@ def meetings_details(meetings, filter_meeting, user, upcoming):
                 'room': meeting.room.room_number,
                 'date': meeting.meeting_date,
                 'host': meeting.meeting.host == user,
+                'hosted_by': user_profile.get_full_name,
             }
 
             meeting_list.append(meeting_item)

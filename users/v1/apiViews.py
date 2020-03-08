@@ -125,6 +125,7 @@ class AuthViewSet(MultipleSerializerMixin, viewsets.GenericViewSet):
 
     @action(methods=['POST', ], detail=False, permission_classes=[IsAuthenticated, IsCompanyAdmin, ])
     def add_employee(self, request):
+        print(request.data)
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         serializer.save()

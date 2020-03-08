@@ -2,11 +2,7 @@ import datetime
 
 import pytz
 from django.core.exceptions import ObjectDoesNotExist, ValidationError
-from pytz.exceptions import UnknownTimeZoneError
 from rest_framework import serializers
-
-from notifications.models import Notification
-from userProfile.models import UserProfile
 from users.models import User
 from utils.otherUtils import send_meeting_mail
 
@@ -33,7 +29,6 @@ class DetailsSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
     def create(self, validated_data):
-        print('Create')
         meeting_uid = validated_data['meeting']        
         details = Details.objects.create(**validated_data)
 
@@ -41,7 +36,12 @@ class DetailsSerializer(serializers.ModelSerializer):
         participant_email = meeting.participant_email
 
         meeting.meeting_status = 'IN'
+        
+        if meeting.type == 'CF':
+            meeting.meeting_status = 'FI'
+
         meeting.save()
+
 
         send_meeting_mail(participant_email, meeting, details)
 

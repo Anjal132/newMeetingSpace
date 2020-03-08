@@ -57,10 +57,10 @@ def active_inactive_users(sender, instance, created, *args, **kwargs):
 def change_meeting_status(sender, instance, created, *args, **kwargs):
     if not created and instance:
         meeting = Host.objects.get(uid=instance.meeting_host.uid)
-        participants_status = Status.objects.filter(meeting_host=meeting).exclude(
-                participant=instance.participant).values_list('participant_status', flat=True)
+        participants_status = Status.objects.filter(meeting_host=meeting).values_list('participant_status', flat=True)
+        print(participants_status)
 
-        if 'PE' or 'PO' not in participants_status:
+        if 'PE' not in participants_status and 'PO' not in participants_status:
             meeting.meeting_status = 'FI'
             meeting.save()
         

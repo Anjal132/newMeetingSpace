@@ -7,6 +7,7 @@ from rest_framework import serializers
 
 from notifications.models import Notification
 from userProfile.models import UserProfile
+from django.core.exceptions import ObjectDoesNotExist
 
 
 class NotificationSerializer(serializers.ModelSerializer):
@@ -41,7 +42,11 @@ class NotificationSerializer(serializers.ModelSerializer):
         return obj.meeting.end_time.strftime('%I:%M %p')
 
     def get_name(self, obj):
-        profile = UserProfile.objects.get(user=obj.notification_by)
+        try:
+            profile = UserProfile.objects.get(user=obj.notification_by)
+        except ObjectDoesNotExist:
+            return "System generated "
+
         return profile.get_full_name
     
     def get_meeting_title(self, obj):
@@ -51,12 +56,14 @@ class NotificationSerializer(serializers.ModelSerializer):
         return obj.meeting.meeting.uid
     
     def get_profile_pics(self, obj):
-        profile = UserProfile.objects.get(user=obj.notification_by)
         profile_pic = ''
+        try:
+            profile = UserProfile.objects.get(user=obj.notification_by)
 
-        if profile.profile_pics != '':
-            profile_pic = settings.MEDIA_URL + str(profile.profile_pics)
-            
+            if profile.profile_pics != '':
+                profile_pic = settings.MEDIA_URL + str(profile.profile_pics)
+        except ObjectDoesNotExist:
+            return profile_pic
         return profile_pic
 
 

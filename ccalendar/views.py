@@ -1,3 +1,4 @@
+from django.core.exceptions import ObjectDoesNotExist
 from django.db import IntegrityError
 from django.http import JsonResponse
 from rest_framework.permissions import IsAuthenticated
@@ -9,6 +10,7 @@ from utils.utils import get_user
 from .models import Google, Outlook
 from .serializers import GoogleCalendarSerializer
 from .utils import get_token_from_code, get_token_from_code_google
+
 
 # Create your views here.
 class GoogleTokenStoreAPIView(APIView):
@@ -32,7 +34,7 @@ class GoogleTokenStoreAPIView(APIView):
             return JsonResponse({'Message': 'Successfully Authenticated'}, status=201)
         except IntegrityError:
             return JsonResponse({'Message': 'The email has already been added. Please add a new email.'}, status=400)
-        except:
+        except Exception:
             return JsonResponse({'Message': 'An Internal error occured. Please try again later'}, status=400)
 
     def get(self, request, *args, **kwargs):
@@ -48,15 +50,12 @@ class GoogleLogoutAPIView(APIView):
         try:
             Google.objects.get(user=user).delete()
             return JsonResponse({'Status': 200, 'Message': 'Successfully removed Google account'}, status=201)
-        except:
+        except ObjectDoesNotExist:
             return JsonResponse({'Status': 400, 'Message': 'Error while removing Google account'}, status=400)
 
 
 class OutlookTokenStoreAPIView(APIView):
-    # authentication_classes = (IsAuthenticated, IsEmployee)
-    authentication_classes = ()
-    permission_classes = ()
-
+    permission_classes = [IsAuthenticated, IsEmployee]
     def post(self, request, *args, **kwargs):
         auth_code = request.data['auth_code']
 

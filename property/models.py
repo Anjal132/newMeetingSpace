@@ -53,3 +53,12 @@ class Room(models.Model):
 
     def __str__(self):
         return self.room_number
+
+
+class RoomBooking(models.Model):
+    room = models.ForeignKey(Room, on_delete=models.CASCADE)
+    booked_by = models.ForeignKey('users.User', on_delete=models.CASCADE)
+    meeting = models.ForeignKey('meeting.Host', on_delete=models.SET_NULL, blank=True, null=True)
+    booking_date = models.DateField()
+    booking_start_time = models.DateTimeField()
+    booking_end_time = models.DateTimeField()

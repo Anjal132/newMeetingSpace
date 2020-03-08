@@ -1,6 +1,7 @@
 from __future__ import absolute_import, unicode_literals
 
 import datetime
+import pytz
 
 from celery import task
 from django.db import connection
@@ -44,7 +45,8 @@ Remove meeting drafts too.
 @task
 def check_company_subscription():
     all_schemas = Organization.objects.all().exclude(schema_name='public')
-    datetoday = datetime.date.today()
+    now = datetime.datetime.now(pytz.UTC)
+    datetoday = now.date()
 
     for schema in all_schemas:
         if schema.is_active and schema.subscription_expiry < datetoday:
@@ -59,12 +61,14 @@ the participant will decline the meeting. The reason for declining will be
 failed to respond in time.
 
 Planning to run every minute.
+Rewrite this code.
 '''
+
 @task
 def reminders_of_meeting():
     all_schemas = Organization.objects.all().exclude(schema_name='public')
     
-    datetimetoday = datetime.datetime.now()
+    datetimetoday = datetime.datetime.now(pytz.UTC)
     datetimetoday = datetimetoday.replace(microsecond=0)
 
     datetimetenmin = datetimetoday + datetime.timedelta(minutes=10)
@@ -132,7 +136,7 @@ after 72 hours.
 @task
 def check_meeting_status():
     all_schemas = Organization.objects.all().exclude(schema_name='public')
-    datetimetoday = datetime.datetime.now()
+    datetimetoday = datetime.datetime.now(pytz.UTC)
 
     for schema in all_schemas:
         connection.set_schema(schema_name=schema.schema_name)
@@ -146,9 +150,8 @@ def check_meeting_status():
             if meeting_host.meeting_status in ['IN', 'FI', 'ON']:
                 if meeting.start_time <= datetimetoday.time() <= meeting.end_time and meeting_host.meeting_status == 'FI':
                     # Change the meeting type to ongoing
-                    # meeting_host.meeting_status = 'ON'
-                    # meeting_host.save()
-                    print('Ongoing')
+                    meeting_host.meeting_status = 'ON'
+                    meeting_host.save()
                 elif meeting.start_time < datetimetoday.time() and meeting_host.meeting_status == 'IN':
                     meeting_host.meeting_status = 'CA'
                     meeting_host.save()

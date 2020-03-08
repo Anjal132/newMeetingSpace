@@ -5,10 +5,9 @@ from django.conf import settings
 from rest_framework import serializers
 from rest_framework.exceptions import ValidationError
 
-from meeting.models import Details
 from userProfile.models import UserProfile
 
-from .models import Department, Property, Room
+from .models import Department, Property, Room, RoomBooking
 
 
 class PropertySerializer(serializers.ModelSerializer):
@@ -68,12 +67,12 @@ class DepartmentDetailSerializer(serializers.ModelSerializer):
         fields = ['id', 'department_name', 'members']
     
     def get_members(self, obj):
-        building = self.context['building']
+        # building = self.context['building']
         user = self.context['user']
         members = []
 
-        if building == -1 or building is None:
-            return members
+        # if building == -1 or building is None:
+        #     return members
 
         user_profiles = UserProfile.objects.filter(department=obj)
         for profile in user_profiles:
@@ -136,11 +135,12 @@ class BookedRoomSerializer(serializers.ModelSerializer):
         read_only_fields = ('booked', )
 
     def get_booked(self, obj):
-        meetings = Details.objects.filter(meeting_date=datetime.date.today(), room=obj)
-        rightnow = datetime.datetime.now(pytz.UTC)
+        # meetings = Details.objects.filter(meeting_date=datetime.date.today(), room=obj)
+        now = datetime.datetime.now(pytz.UTC)
+        meetings = RoomBooking.objects.filter(booking_date=now.date(), room=obj)
 
         for meeting in meetings:
-            if meeting.start_time <= rightnow.time() <= meeting.end_time:
+            if meeting.booking_start_time.time() <= now.time() <= meeting.booking_end_time.time():
                 return True
 
         return False

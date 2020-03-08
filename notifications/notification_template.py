@@ -51,15 +51,18 @@ def create_notification_host(meeting):
         kwargs['title'] = 'Invitation to meeting'
         kwargs['message'] = ' has invited you to '
         after_meeting_status_change(participants, details, **kwargs)
+
     elif meeting.meeting_status == 'FI':
         kwargs['title'] = 'Meeting has been finalized'
         kwargs['message'] = ' has finalized meeting '
         after_meeting_status_change(participants, details, **kwargs)
+
     elif meeting.meeting_status == 'CA':
         kwargs['title'] = 'Meeting has been cancelled'
         kwargs['message'] = ' has been cancelled '
         after_meeting_status_change(participants, details, **kwargs)
         canceled_meeting_mail(meeting, details)
+        
     elif meeting.meeting_status == 'CO':
         participants = Status.objects.filter(meeting_host=meeting, participant_status='AC')
         kwargs['title'] = 'Meeting has been completed'

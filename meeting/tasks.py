@@ -86,7 +86,7 @@ def reminders_of_meeting():
 
             if datetimetenmin.time() == meeting.start_time:
                 title = 'Reminder for meeting'
-                message = 'Meeting ' + meeting.meeting.title + \
+                message = meeting.meeting.title + \
                     ' starts soon. Please respond to the meeting if you have not done so already.'
                 notification_type = 'meeting'
 

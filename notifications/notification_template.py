@@ -59,7 +59,7 @@ def create_notification_host(meeting):
 
     elif meeting.meeting_status == 'CA':
         kwargs['title'] = 'Meeting has been cancelled'
-        kwargs['message'] = ' has been cancelled '
+        kwargs['message'] = ' has cancelled '
         after_meeting_status_change(participants, details, **kwargs)
         canceled_meeting_mail(meeting, details)
         

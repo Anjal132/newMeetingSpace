@@ -46,7 +46,7 @@ class MeetingOnDateAPIView(APIView):
 
         for meeting_on_date in meetings_on_date:
             if not meeting_on_date.meeting.host == user:
-                if not is_participant(meeting_on_date.meeting.id, user):
+                if not is_participant(meeting_on_date.meeting.uid, user):
                     continue
 
             meeting_on_day = {
@@ -343,7 +343,7 @@ class ChangeHostStatusAPIView(APIView):
 
             now = datetime.datetime.now(pytz.UTC)
             meeting_datetime = datetime.datetime.combine(
-                meeting_detail.meeting_date, meeting_detail.start_time, tzinfo=pytz.UTC)
+                meeting_detail.meeting_date, meeting_detail.end_time, tzinfo=pytz.UTC)
 
             if not meeting.host == user:
                 return Response({'Message': 'Access Forbidden'}, status=status.HTTP_403_FORBIDDEN)
@@ -357,10 +357,12 @@ class ChangeHostStatusAPIView(APIView):
                 return Response({'Message': message}, status=status.HTTP_400_BAD_REQUEST)
 
             if meeting.meeting_status == 'CA' and change_status_to == 'CO':
+                print(1)
                 message = 'Cannot change meeting_status now'
                 return Response({'Message': message}, status=status.HTTP_400_BAD_REQUEST)
 
             if not meeting.meeting_status == 'ON' and change_status_to == 'CO':
+                print(2)
                 message = 'Cannot change meeting_status now'
                 return Response({'Message': message}, status=status.HTTP_400_BAD_REQUEST)
 

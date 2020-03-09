@@ -323,7 +323,8 @@ def get_suggestion(suggestion_date, suggestions, meeting, event_start_time, even
             'end_time': (end_time + datetime.timedelta(minutes=duration)).strftime('%I:%M %p'),
             'room_number': empty_room.room_number,
             'room_id': empty_room.id,
-            'building': empty_room.property.name
+            'building': empty_room.property.name,
+            'room_amenities': empty_room.room_amenity,
         }
 
         suggestions.append(suggestion)

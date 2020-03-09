@@ -192,9 +192,14 @@ class AdminDashboardAPIView(APIView):
             }
 
             number_of_meetings_per_month.append(meeting_per_month)
+
+            if len(all_meetings) == 0:
+                avg_users_per_meeting = 0
+            else:
+                avg_users_per_meeting = round(members/len(all_meetings), 2)
         return Response({
             'rooms_with_most_meetings': room_with_most_meetings[:limit],
-            'average_number_of_users_per_meeting': round(members/len(all_meetings), 2),
+            'average_number_of_users_per_meeting': avg_users_per_meeting,
             'meetings_per_month': number_of_meetings_per_month,
             'number_of_ongoing_meetings': 5,
             'booked_rooms': 10

@@ -75,12 +75,18 @@ class UserProfileDetailSerializer(serializers.ModelSerializer):
     floors = serializers.SerializerMethodField()
     office_start_time = serializers.TimeField(format='%I:%M %p')
     office_end_time = serializers.TimeField(format='%I:%M %p')
+    building_id = serializers.SerializerMethodField()
 
     class Meta:
         model = UserProfile
-        fields = ('room', 'floor', 'floors', 'building', 'department', 'first_name', 'middle_name',
+        fields = ('room', 'floor', 'floors', 'building_id', 'building', 'department', 'first_name', 'middle_name',
                   'last_name', 'internationalization', 'profile_pics', 'google_sign_in', 'outlook_sign_in',
                   'office_start_time', 'office_end_time')
+    
+    def get_building_id(self, obj):
+        if obj.building is not None:
+            return obj.building.id
+        return None
 
     def get_floor(self, obj):
         if obj.room is not None:

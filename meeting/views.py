@@ -539,6 +539,7 @@ class HostPostponeFinalizeMeetingAPIView(generics.UpdateAPIView):
 
             first_instance = Details.objects.filter(meeting=meeting)
             try:
+                print(request.data)
                 if first_instance.exists():
                     serializer = self.get_serializer(
                         first_instance[0], data=request.data, partial=partial)

@@ -32,7 +32,6 @@ def is_meeting_valid(meeting, invalid_meeting_param):
     return message, invalid_meeting
 
 
-
 def encode_timezone_aware_datetime(datetimes):
     tzone = pytz.timezone('UTC')
     local_time = tzone.localize(datetimes).isoformat()
@@ -240,9 +239,12 @@ def get_empty_room(date, start_time, end_time, meeting):
         if private_room.room is not None:
             booked_room_list.append(private_room.room.id)
 
-    members = len(meeting.participant_email)
+    members = 1
+    
+    if meeting.participant_email is not None:
+        members = len(meeting.participant_email)
+
     members += Status.objects.filter(meeting_host=meeting).count()
-    members += 1
 
     if meeting_type != 'CF':
         remaining_rooms = Room.objects.filter(property=user_profile.building, room_type__in=[

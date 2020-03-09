@@ -51,6 +51,7 @@ class CompanyDetailAPIView(generics.RetrieveUpdateAPIView):
     lookup_field = 'short_name'
 
     def get_queryset(self):
+        print(self.request.data)
         short_name = self.kwargs['short_name']
         return Organization.objects.filter(short_name=short_name)
 
@@ -147,6 +148,12 @@ class AdminDashboardAPIView(APIView):
         room_bookings = RoomBooking.objects.values_list('room').annotate(room_count=Count('room')).order_by('-room_count')
         
         room_with_most_meetings = []
+        
+        total_number_of_meetings = 0
+        for key, value in room_bookings:
+            total_number_of_meetings += value
+
+            
 
         for room_booking in room_bookings:
             room = Room.objects.get(id=room_booking[0])
@@ -156,6 +163,7 @@ class AdminDashboardAPIView(APIView):
                 'building': room.property.name,
                 'floor': room.floor,
                 'number_of_meetings_held': room_booking[1],
+                'percent_of_meetings_held': '{0}'.format(round((room_booking[1]/total_number_of_meetings)*100, 0)),
                 'capacity': room.room_capacity
             }
             
@@ -163,13 +171,13 @@ class AdminDashboardAPIView(APIView):
         
         all_meetings = Host.objects.exclude(meeting_status__in=['DR', 'CA'])
 
-        members = 1
+        members = 0
         for meeting in all_meetings:
             if meeting.participant_email is not None:
                 members += len(meeting.participant_email)
             
             participants = Status.objects.filter(meeting_host=meeting).count()
-            members += participants
+            members = participants + members + 1
         
 
         number_of_meetings_per_month = []
@@ -179,12 +187,15 @@ class AdminDashboardAPIView(APIView):
             meetings_in_month = Details.objects.filter(meeting_date__year=year, meeting_date__month=i).count()
 
             meeting_per_month = {
-                i:meetings_in_month
+                'month': '{0}'.format(i),
+                'meetings_in_month': meetings_in_month,
             }
 
             number_of_meetings_per_month.append(meeting_per_month)
         return Response({
             'rooms_with_most_meetings': room_with_most_meetings[:limit],
-            'average_number_of_users_per_meeting': members/len(all_meetings),
-            'meetings_per_month': number_of_meetings_per_month
+            'average_number_of_users_per_meeting': round(members/len(all_meetings), 2),
+            'meetings_per_month': number_of_meetings_per_month,
+            'number_of_ongoing_meetings': 5,
+            'booked_rooms': 10
         }, status=status.HTTP_200_OK)

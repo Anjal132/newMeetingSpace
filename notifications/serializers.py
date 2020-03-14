@@ -3,11 +3,11 @@ import datetime
 import pytz
 import timeago
 from django.conf import settings
+from django.core.exceptions import ObjectDoesNotExist
 from rest_framework import serializers
 
 from notifications.models import Notification
 from userProfile.models import UserProfile
-from django.core.exceptions import ObjectDoesNotExist
 
 
 class NotificationSerializer(serializers.ModelSerializer):
@@ -22,7 +22,7 @@ class NotificationSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Notification
-        fields = ('id', 'name', 'message', 'notification_type', 'meeting', 'meeting_title', 'profile_pics', 'meeting_date', 'start_time', 'end_time', 'timeago')
+        fields = ('id', 'name', 'message', 'notification_type', 'meeting', 'meeting_title', 'profile_pics', 'meeting_date', 'start_time', 'end_time', 'timeago', 'read')
     
     def get_meeting_date(self, obj):
         return obj.meeting.meeting_date

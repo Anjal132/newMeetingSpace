@@ -23,7 +23,7 @@ class NotificationReadAPIView(APIView):
 
 
 class AllNotificationsAPIView(ListAPIView):
-    permission_classes = [IsEmployee, IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsEmployee,]
     serializer_class = NotificationSerializer
     
     def get_queryset(self):

@@ -27,11 +27,12 @@ class CreateAdminSerializer(serializers.ModelSerializer):
 class CreateCompanySerializer(serializers.ModelSerializer):
     """ This is the Serializer class to create a company. """
     company_admin = CreateAdminSerializer(many=True)
+    subscription_started_from = serializers.SerializerMethodField()
 
     class Meta:
         model = Organization
         fields = ('name', 'short_name', 'company_admin',
-                  'on_trial', 'subscription_expiry', 'is_active')
+                  'on_trial', 'subscription_expiry', 'is_active', 'subscription_started_from')
 
     def create(self, validated_data):
         admin_list = validated_data.pop('company_admin')
@@ -43,6 +44,9 @@ class CreateCompanySerializer(serializers.ModelSerializer):
                 email=email_admin, organization=organization)
             organization.company_admin.add(admin)
         return organization
+
+    def get_subscription_started_from(self, obj):
+        return obj.created_at.date()
 
 
 class CompanyDetailSerializer(serializers.ModelSerializer):

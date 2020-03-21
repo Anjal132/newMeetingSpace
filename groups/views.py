@@ -1,6 +1,6 @@
 from django.core.exceptions import ObjectDoesNotExist, ValidationError
 from rest_framework import status
-from rest_framework.generics import ListCreateAPIView
+from rest_framework.generics import ListCreateAPIView, RetrieveDestroyAPIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
@@ -67,4 +67,19 @@ class GroupAPIView(ListCreateAPIView):
         if self.request.method == 'POST':
             return GroupSerializer
         return GroupSerializer
- 
+
+
+class RemoveGroupAPIView(RetrieveDestroyAPIView):
+    permission_classes = [IsAuthenticated, IsEmployee]
+    serializer_class = GroupSerializer
+    
+    def get_queryset(self):
+        user = get_user(self.request)
+        group_id = self.kwargs['pk']
+
+        if group_id is not None:
+            group = Group.objects.filter(id=group_id)
+
+            if group.exists() and group[0].leader == user:
+                return Group.objects.filter(id=group_id)
+        return Group.objects.none()

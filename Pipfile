@@ -41,6 +41,8 @@ daphne = "*"
 channels = "*"
 django-filter = "*"
 timeago = "*"
+gunicorn = "*"
+django-heroku = "*"
 
 [requires]
 python_version = "3.8"

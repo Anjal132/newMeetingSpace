@@ -57,7 +57,8 @@ class GoogleLogoutAPIView(APIView):
 class OutlookTokenStoreAPIView(APIView):
     permission_classes = [IsAuthenticated, IsEmployee]
     def post(self, request, *args, **kwargs):
-        auth_code = request.data['auth_code']
+        print(request.data)
+        auth_code = request.data['code']
 
         redirect_uri = 'http://localhost:8050/tutorial/gettoken'
 

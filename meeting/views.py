@@ -56,7 +56,8 @@ class MeetingOnDateAPIView(APIView):
                 'end_time': meeting_on_date.end_time.strftime('%I:%M %p'),
                 'host': meeting_on_date.meeting.host == user,
                 'room': meeting_on_date.room.room_number,
-                'meeting_date': meeting_on_date.meeting_date
+                'meeting_date': meeting_on_date.meeting_date,
+                'meeting_id': meeting_on_date.meeting.uid
             }
 
             meetings.append(meeting_on_day)

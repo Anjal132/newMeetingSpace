@@ -75,7 +75,7 @@ class AuthViewSet(MultipleSerializerMixin, viewsets.GenericViewSet):
         user = get_user(self.request)
         user.set_password(serializer.validated_data['new_password'])
         user.save()
-        return Response({"status": "Success"}, status=status.HTTP_204_NO_CONTENT)
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
     @action(methods=['POST', ], detail=False, permission_classes=[IsAuthenticated, IsCompanyAdmin, ])
     def resend_confirmation(self, request):

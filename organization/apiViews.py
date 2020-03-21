@@ -1,21 +1,22 @@
+import datetime
+
+import pytz
 from django.db.models import Count
 from rest_framework import generics, status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from meeting.models import Details, Host, Status
 from organization.apiSerializers import (CompanyProfileSerializer,
                                          CompanyStatusSerializer,
                                          CreateCompanySerializer)
 from organization.models import Organization
 from permission.permissions import IsCompanyAdmin, IsStaffUser
-from meeting.models import Host, Status, Details
 from property.models import Room, RoomBooking
 from users.models import User
 from utils.otherUtils import send_mail_admin
 from utils.utils import get_user
-import datetime
-import pytz
 
 # Create your views here.
 
@@ -90,8 +91,9 @@ class CompanyDashboardAPIVew(APIView):
         for company in all_companies:
             data = {
                 'company_name': company.name,
-                'active_users': User.objects.filter(is_active=True, temp_name=company.schema_name).count(),
-                'on_trial': company.on_trial
+                'active_users': User.objects.filter(is_active=True, temp_name=company.schema_name, is_verified=True).count(),
+                'on_trial': company.on_trial,
+                'total_users': User.objects.filter(temp_name=company.schema_name).count()
             }
             company_users_count.append(data)
 
@@ -110,7 +112,9 @@ class CompanyDashboardAPIVew(APIView):
             'on_trial_companies': on_trial_companies,
             'total_users': total_users,
             'total_active_users': total_active_users,
-            'company_users': company_users_count
+            'company_users': company_users_count,
+            'average_time_taken_to_host_meeting': '37 seconds',
+            'average_users_per_meeting': '2',
         }
 
         return Response(response, status=status.HTTP_200_OK)
@@ -123,6 +127,8 @@ Company Admin Dashboard
 class AdminDashboardAPIView(APIView):
     permission_classes = [IsAuthenticated, IsCompanyAdmin]
     def get(self, request, *args, **kwargs):
+        user = get_user(request)
+        total_users = User.objects.filter(temp_name=user.temp_name).count()
         limit = request.query_params.get('limit', None)
         year = request.query_params.get('year', None)
 
@@ -148,6 +154,7 @@ class AdminDashboardAPIView(APIView):
         room_bookings = RoomBooking.objects.values_list('room').annotate(room_count=Count('room')).order_by('-room_count')
         
         room_with_most_meetings = []
+        room_with_least_meetings = []
         
         total_number_of_meetings = 0
         for key, value in room_bookings:
@@ -166,8 +173,17 @@ class AdminDashboardAPIView(APIView):
                 'percent_of_meetings_held': '{0}'.format(round((room_booking[1]/total_number_of_meetings)*100, 0)),
                 'capacity': room.room_capacity
             }
+
+            least_used_room = {
+                'room_number': room.room_number,
+                'building': room.property.name,
+                'floor': room.floor,
+                'number_of_meetings_held': room_booking[1],
+                'capacity': room.room_capacity
+            }
             
             room_with_most_meetings.append(most_used_room)
+            room_with_least_meetings.append(least_used_room)
         
         all_meetings = Host.objects.exclude(meeting_status__in=['DR', 'CA'])
 
@@ -181,6 +197,7 @@ class AdminDashboardAPIView(APIView):
         
 
         number_of_meetings_per_month = []
+        active_users_per_month = []
         number_of_meetings_per_month.append({'year': year})
         
         for i in range(1, 13):
@@ -191,16 +208,28 @@ class AdminDashboardAPIView(APIView):
                 'meetings_in_month': meetings_in_month,
             }
 
+            active_users_this_month = {
+                'month': '{0}'.format(i),
+                'active_users_count': 13
+            }
+
             number_of_meetings_per_month.append(meeting_per_month)
+            active_users_per_month.append(active_users_this_month)
 
             if len(all_meetings) == 0:
                 avg_users_per_meeting = 0
             else:
                 avg_users_per_meeting = round(members/len(all_meetings), 2)
+        
         return Response({
             'rooms_with_most_meetings': room_with_most_meetings[:limit],
             'average_number_of_users_per_meeting': avg_users_per_meeting,
             'meetings_per_month': number_of_meetings_per_month,
             'number_of_ongoing_meetings': 5,
-            'booked_rooms': 10
+            'booked_rooms': 10,
+            'least_used_rooms': room_with_least_meetings,
+            'average_time_taken_to_host_meeting': '30 seconds',
+            'total_meetings_this_week': '4',
+            'total_users': total_users,
+            'active_users_per_month': active_users_per_month
         }, status=status.HTTP_200_OK)

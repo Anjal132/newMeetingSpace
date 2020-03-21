@@ -8,8 +8,8 @@ import requests
 CLIENT_ID = '51ada4be-c32e-4b21-8a82-04606b62bdfe'
 CLIENT_SECRET = '6L6KsI=9H7.znviO]tubgvLVjJt/===K'
 
-GOOGLE_CLIENT_ID = '60821597216-55fc0nt8aqmc1tgj4agpvaa1lma9ps6j.apps.googleusercontent.com'
-GOOLGLE_CLIENT_SECRET = 'BPA6_Fbn5twtpJgLWwPsv_iy'
+GOOGLE_CLIENT_ID = '156351485709-nbf2vn6f143hnal97j11s876d9o2lr0n.apps.googleusercontent.com'
+GOOLGLE_CLIENT_SECRET = 'w7vAxkzKuAi-e0Ls4fQTuwIk'
 
 GOOGLE_TOKEN_URI = 'https://oauth2.googleapis.com/token'
 
@@ -25,6 +25,7 @@ SCOPES = [
 ]
 
 def get_token_from_code(auth_code, redirect_uri):
+    print(auth_code)
     post_data = {
         'grant_type':'authorization_code',
         'code':quote(auth_code),
@@ -36,6 +37,7 @@ def get_token_from_code(auth_code, redirect_uri):
     }
 
     res = requests.post(TOKEN_URL, data=post_data)
+    print(res.json())
 
     try:
         return res.json()

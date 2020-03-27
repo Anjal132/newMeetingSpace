@@ -15,6 +15,7 @@ from users.serializers import (ProfileSearchSerializer,
 from users.v1.apiSerializers import (ActiveInactiveUserSerializer,
                                      UserListSerializer)
 from utils.utils import get_user
+from notifications.models import FCMRegistrationToken
 
 
 # class AddBatchEmployeeAPIView(APIView):
@@ -186,3 +187,13 @@ class GetUsersAPIView(ListAPIView):
         user = get_user(self.request)
         schema_name = user.temp_name
         return User.objects.filter(temp_name=schema_name).exclude(id=user.id)
+
+
+class LogoutAPIView(APIView):
+    permission_classes = (IsAuthenticated, IsEmployee)
+
+    def get(self, request, *args, **kwargs):
+        user = get_user(request)
+
+        FCMRegistrationToken.objects.filter(user=user).delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)

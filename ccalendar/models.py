@@ -14,3 +14,4 @@ class Outlook(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE)
     access = models.TextField()
     refresh = models.TextField()
+    # email = models.EmailField(unique=True)

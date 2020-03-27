@@ -1,6 +1,7 @@
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import IntegrityError
 from django.http import JsonResponse
+from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
@@ -54,13 +55,28 @@ class GoogleLogoutAPIView(APIView):
             return JsonResponse({'Status': 400, 'Message': 'Error while removing Google account'}, status=400)
 
 
+
+class OutlookLogoutAPIView(APIView):
+    permission_classes = (IsAuthenticated, IsEmployee)
+
+    def delete(self, request, *args, **kwargs):
+        user = get_user(request)
+
+        try:
+            Outlook.objects.get(user=user).delete()
+            return JsonResponse({'Status': 200, 'Message': 'Successfully removed Outlook account'}, status=201)
+        except ObjectDoesNotExist:
+            return JsonResponse({'Status': 400, 'Message': 'Error while removing Outlook account'}, status=400)
+
+
+
 class OutlookTokenStoreAPIView(APIView):
     permission_classes = [IsAuthenticated, IsEmployee]
     def post(self, request, *args, **kwargs):
         print(request.data)
         auth_code = request.data['code']
 
-        redirect_uri = 'http://localhost:8050/tutorial/gettoken'
+        redirect_uri = 'http://localhost:8000'
 
         token = get_token_from_code(auth_code, redirect_uri)
 
@@ -70,7 +86,7 @@ class OutlookTokenStoreAPIView(APIView):
             outlook = Outlook(user=user, access=token['access_token'], refresh=token['refresh_token'])
             outlook.save()
 
-            return JsonResponse({'Message': 'Successfully Authenticated'}, status=201)
+            return JsonResponse({'email': 'abcd@outlook.com'}, status=status.HTTP_201_CREATED)
         except:
             return JsonResponse({'Message': 'An error occured. Please try again.'}, status=400)
 

@@ -1,12 +1,13 @@
 from urllib.parse import quote
-from django.dispatch import receiver
-from django.db.models.signals import post_save
-from meeting.models import Host, Status
 
 import requests
+from django.db.models.signals import post_save
+from django.dispatch import receiver
 
-CLIENT_ID = '51ada4be-c32e-4b21-8a82-04606b62bdfe'
-CLIENT_SECRET = '6L6KsI=9H7.znviO]tubgvLVjJt/===K'
+from meeting.models import Host, Status
+
+CLIENT_ID = '1e94c5aa-f9e8-46db-b73b-2878b6313cd2'
+CLIENT_SECRET = 'ghPx.S81:D[7_gNz2.cLJR=ou:Z.=2eF'
 
 GOOGLE_CLIENT_ID = '156351485709-nbf2vn6f143hnal97j11s876d9o2lr0n.apps.googleusercontent.com'
 GOOLGLE_CLIENT_SECRET = 'w7vAxkzKuAi-e0Ls4fQTuwIk'
@@ -21,7 +22,6 @@ SCOPES = [
     'User.Read',
     'offline_access',
     'Calendars.Read',
-    'Calendars.Read.Shared'
 ]
 
 def get_token_from_code(auth_code, redirect_uri):
@@ -80,5 +80,4 @@ def refresh_token_from_google(refresh_token, redirect_uri):
         return res.json()
     except:
         return 'Error'
-
 

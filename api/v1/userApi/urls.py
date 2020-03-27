@@ -2,9 +2,10 @@
 This is the root url router for all our User API's.
 """
 
-from django.urls import include, path, re_path
+from django.urls import path
 
-from users.apiViews import LoginUserAPIView, PasswordResetConfirmAPIView, RefreshTokenAPIView, UpdateProfileAPIView
+from users.apiViews import (LoginUserAPIView, PasswordResetConfirmAPIView,
+                            RefreshTokenAPIView, UpdateProfileAPIView)
 
 urlpatterns = [
     path('resetPassword/', PasswordResetConfirmAPIView.as_view()),

@@ -6,7 +6,7 @@ from django.conf import settings
 from django.core.exceptions import ObjectDoesNotExist
 from rest_framework import serializers
 
-from notifications.models import Notification
+from notifications.models import Notification, FCMRegistrationToken
 from userProfile.models import UserProfile
 
 
@@ -71,3 +71,15 @@ class NotificationReadSerializer(serializers.ModelSerializer):
     class Meta:
         model = Notification
         fields = ('read', )
+
+
+class FCMTokenSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = FCMRegistrationToken
+        fields = ('token', )
+
+    def create(self, validated_data):
+        validated_data['user'] = self.context['user']
+        token = FCMRegistrationToken.objects.create(**validated_data)
+
+        return token
